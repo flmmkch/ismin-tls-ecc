@@ -56,7 +56,7 @@ class elliptic_curve:
 		# sinon si y non nul
 		x = ((3 * m[0] ** 2 + self.a) / (2 * m[1])) ** 2 - 2 * m[0]
 		y = (m[0] - m[1]) * (3 * m[0] ** 2 + self.a) / (2 * m[1]) - m[1]
-		return (x,y)
+		return (mpz(x),mpz(y))
 	def add(self, m, n):
 		if m != n: # si deux points differents
 			if m[0] == n[0]: # et x1 == x2
@@ -64,9 +64,9 @@ class elliptic_curve:
 			# sinon, dans le cas ou x1 =/= x2
 			x3 = ((n[1] - m[1]) / (n[0] - m[0])) ** 2 - n[0] - m[0]
 			y3 = (m[0] - x3) * (n[1] - m[1]) / (n[0] - m[0]) - m[1]
-			return (x3, y3)
+			return (mpz(x3), mpz(y3))
 		# sinon, si les deux points sont égaux
-		return double(m)
+		return self.double(m)
 
 class ecc_paramset:
 	# Voir section 3.3 du RFC6090
