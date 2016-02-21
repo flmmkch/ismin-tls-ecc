@@ -51,13 +51,17 @@ class elliptic_curve:
 			y = -y
 		return (x,y)
 	def double(self, m):
-		if m[1] == 0: # si y est nul
-			return none
+		if m == None or m[1] == 0: # si y est nul
+			return None
 		# sinon si y non nul
 		x = ((3 * m[0] ** 2 + self.a) / (2 * m[1])) ** 2 - 2 * m[0]
 		y = (m[0] - m[1]) * (3 * m[0] ** 2 + self.a) / (2 * m[1]) - m[1]
 		return (mpz(x),mpz(y))
 	def add(self, m, n):
+		if m == None: # le point a l'infini (représenté ici par None.. à améliorer TODO) est l'élément neutre du groupe additif
+			return n
+		if n == None:
+			return m
 		if m != n: # si deux points differents
 			if m[0] == n[0]: # et x1 == x2
 				return None
@@ -67,6 +71,16 @@ class elliptic_curve:
 			return (mpz(x3), mpz(y3))
 		# sinon, si les deux points sont égaux
 		return self.double(m)
+	def mul(self, m, e): # algorithme square & multiply: e est ici "l'exponent"
+		if e == 0 or m == None:
+			return None
+		s = None
+		while e > 0:
+			s = self.double(s)
+			if e & 1:
+				s = self.add(s, m)
+			e >>= 1
+		return s
 
 class ecc_paramset:
 	# Voir section 3.3 du RFC6090
