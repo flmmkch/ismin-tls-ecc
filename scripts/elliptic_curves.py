@@ -4,8 +4,11 @@
 # Use SystemRandom() for a cryptographically secure RNG
 from random import SystemRandom as sr
 
+# Command to generate a prime number:
+# openssl prime -generate -bits 521 -hex
+
 import gmpy2
-from gmpy2 import mpz,mpfr
+from gmpy2 import mpz, mpfr
 
 def random_bits(n):
 	return sr().getrandbits(n)
@@ -32,7 +35,7 @@ def mod_inverse(n, modulo):
 # Courbe elliptique, implementation naive
 # ici ce n'est pas sur un corps fini en particulier
 class elliptic_curve:
-	# Definie par l'equation suivante
+	# Définie par l'équation suivante
 	# y^2 = x^3 + a * x + b ou x, y, a, b sont des elements de Fp
 	# et le discriminant n'est pas nul
 	def __init__(self, a, b, precision = 64):
@@ -81,6 +84,8 @@ class elliptic_curve:
 				s = self.add(s, m)
 			e >>= 1
 		return s
+
+
 
 class ecc_paramset:
 	# Voir section 3.3 du RFC6090
