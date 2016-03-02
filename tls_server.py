@@ -3,19 +3,24 @@
 import socket
 
 s = socket.socket()
-host = socket.gethostname() # Get local machine name
-port = 8004                # Reserve a port for your service.
+host = socket.gethostname()		# Get local machine name
+port = 8004                		# Reserve a port for your service.
 s.bind((host, port))
 print('Hosting on ' + str(host) + ':' + str(port))
 s.listen()
-while True:
-	c, addr = s.accept() # Establish connection with client.
-	print('Connected with ', addr)
-	loop_continue = True
-	while loop_continue:
-		test = s.recv(4096)
-		if test == b'\x00':
-			loop_continue = False
-		else:
-			print(test.decode('UTF-8'))
-	c.close()  
+
+# On ne fait qu'une seule connection...
+c, addr = s.accept()  		# Establish connection with client.
+print('Connected with ', addr)
+loop_continue = True
+while loop_continue:
+	textSizeBytes = c.recv(8)
+	if textSizeBytes == (b'\x00' * 8) or textSizeBytes == b'':
+		break
+	else:
+		textSize = int.from_bytes(textSizeBytes, byteorder='big')
+		textString = c.recv(textSize).decode('UTF-8')
+		print("→ " + textString)
+print('Client quitted. Stopping the server...')
+c.close()
+s.close()

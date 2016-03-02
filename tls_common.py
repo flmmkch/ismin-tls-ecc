@@ -4,4 +4,3 @@ class tls:
 	def __init__(self):
 		self.clientHello = b'\x01'
 
-print(tls.clientHello)
