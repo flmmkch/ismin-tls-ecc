@@ -1,0 +1,11 @@
+cahier des charges pour lundi 07/03 rdv avec Nadia à 10h en a216
+
+identification des fonctions a ajouter pour le projet
+	→ fonction de creation d'une courbe élliptique
+	→ vérification de l'ordre d'une courbe elliptique (il faut qu'il soit suffisament grand) // peut etre passage par une librairie (sage ou autre)
+	→ fonction de double and add (pour additionner et doubler les points sur la courbe)
+	→ faire les fonctions en coordonnées jacobienne et affines si possible pour comparer les deux sinon n'utiliser que les coordonnées jacobiennes
+	→ mise en place d'un serveur et d'un client pour des tests et des demonstrations
+	→ ajout de fonctions prééxistentes pour le hashage (dans la partie handshake de Diffie-Hellman)
+	→ calcul de l'inverse d'un point
+
