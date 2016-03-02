@@ -1,4 +1,4 @@
-#!/bin/python
+#!/bin/python3
 
 # Just using the random module isn't enough
 # Use SystemRandom() for a cryptographically secure RNG
@@ -84,8 +84,6 @@ class elliptic_curve:
 				s = self.add(s, m)
 			e >>= 1
 		return s
-
-
 
 class ecc_paramset:
 	# Voir section 3.3 du RFC6090
