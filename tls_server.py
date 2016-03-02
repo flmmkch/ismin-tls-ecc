@@ -7,7 +7,7 @@ host = socket.gethostname()		# Get local machine name
 port = 8004                		# Reserve a port for your service.
 s.bind((host, port))
 print('Hosting on ' + str(host) + ':' + str(port))
-s.listen()
+s.listen(0)
 
 # On ne fait qu'une seule connection...
 c, addr = s.accept()  		# Establish connection with client.
