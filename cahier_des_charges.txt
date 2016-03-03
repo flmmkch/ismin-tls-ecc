@@ -8,4 +8,8 @@ identification des fonctions a ajouter pour le projet
 	→ mise en place d'un serveur et d'un client pour des tests et des demonstrations
 	→ ajout de fonctions prééxistentes pour le hashage (dans la partie handshake de Diffie-Hellman)
 	→ calcul de l'inverse d'un point
+	→ comparaison de deux points en jacobiennes
+	→ surcharge des opérateurs == et +
+	→ modulo sur une courbe elliptique
+	→ ...
 
