@@ -246,21 +246,31 @@ rfcExample = [ParamSet(mpz('0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFF
 
 exampleCurves = [EllipticCurveJ(rfcExample[0])]
 
+
+def singleTest(test, **kwargs):
+	for key, value in kwargs.items():
+		locals()[str(key)] = value
+	testresult = bool(eval(test))
+	if not testresult:
+		raise Exception('Test failed: ' + str(test))
+	return testresult
+
+
 def doTests():
-	s = True
-	g = exampleCurves[0].g
-	s &= (g == g)
-	s &= (g + g != g)
-	s &= (g + g == g.double())
-	s &= (g + g + g == g.double() + g)
-	s &= (g + g + g == g * 3)
-	s &= (g + g != g * 3)
-	s &= ((g + g + g).double() == g * 6)
-	s &= (g * 4 == g + g + g + g)
-	s &= (g * 4 != g + g + g + g + g)
-	return s
+	p = exampleCurves[0].g
+	singleTest('g == g', g=p)
+	singleTest('g + g != g', g=p)
+	singleTest('g + g == g.double()', g=p)
+	singleTest('g + g + g == g.double() + g', g=p)
+	singleTest('g + g + g == g * 3', g=p)
+	singleTest('g + g != g * 3', g=p)
+	singleTest('(g + g + g).double() == g * 6', g=p)
+	singleTest('g * 4 == g + g + g + g', g=p)
+	singleTest('g * 4 != g + g + g + g + g', g=p)
+	return True
 
-
+# do the tests each time the module is loaded?
+doTests()
 
 
 
