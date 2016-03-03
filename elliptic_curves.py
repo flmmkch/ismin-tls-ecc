@@ -199,6 +199,12 @@ class PointJ:
 				other >>= 1
 			return s
 
+	def __neg__(self):
+		return PointJ(self.curve, (self.x, -self.y, self.z))
+
+	def __sub__(self, other):
+		return (self + (- other))
+
 	def copy(self):
 		return PointJ(self.curve, (self.x, self.y, self.z))
 
@@ -212,7 +218,7 @@ class PointJ:
 		z2 = 2 * self.y * self.z
 		return PointJ(self.curve, (x2, y2, z2))
 
-	def __str__(self):
+	def __repr__(self):
 		if bool(self.inf):
 			return '∞'
 		s = ''
@@ -229,7 +235,7 @@ class EllipticCurveJ:  # Courbes elliptiques, implémentation avec les coordonn�
 		self.g = PointJ(self, params.g)
 		self.infinity = PointJ(self, PointJ.INFINITY)
 
-	def __str__(self):
+	def __repr__(self):
 		s = ''
 		s += 'p : ' + str(self.params.p) + '\n'
 		s += 'a : ' + str(self.params.a) + '\n'
@@ -256,7 +262,7 @@ def singleTest(test, **kwargs):
 	return testresult
 
 
-def doTests():
+def basicTests():
 	p = exampleCurves[0].g
 	singleTest('g == g', g=p)
 	singleTest('g + g != g', g=p)
@@ -270,7 +276,9 @@ def doTests():
 	return True
 
 # do the tests each time the module is loaded?
-doTests()
+basicTests()
+
+
 
 
 
