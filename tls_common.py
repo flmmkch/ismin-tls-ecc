@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 
 class tls:
-	def __init__(self):
-		self.clientHello = b'\x01'
-
+	clientHello = b'\x01'
+	serverHello = b'\x01'
