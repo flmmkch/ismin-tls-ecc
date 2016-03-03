@@ -175,6 +175,18 @@ class PointJ:
 			return PointJ(self.curve, x, y, z)
  		else:
 			return None
+	# double and add algorithm
+	def __mul__(self, other):
+		if type(other) is int:
+			if other == 0:
+				return PointJ(self.curve, PointJ.INFINITY)
+			s = self
+			while other > 0:
+				s = self.double()
+				if other & 1:
+					s += self
+				other >>= 1
+			return s
 	def double(self):
 		if self.y == 0 or self.inf:
 			return PointJ(self.curve, PointJ.INFINITY)
