@@ -257,6 +257,7 @@ def doTests():
 	s &= (g + g != g * 3)
 	s &= ((g + g + g).double() == g * 6)
 	s &= (g * 4 == g + g + g + g)
+	s &= (g * 4 != g + g + g + g + g)
 	return s
 
 
