@@ -116,9 +116,12 @@ class ECPoint:
 		self.y = y
 		self.curve = curve
 
+
 class PointJ:
 	INFINITY = -1
-	def __init__(self, curve, point = None):
+
+	def __init__(self, curve, point=None):
+		self.inf = False
 		if point is None:
 			self.curve = curve
 			self.x = curve.g.x
@@ -141,28 +144,34 @@ class PointJ:
 				self.z = mpz(point[2])
 			else:
 				raise Exception()
+
 	def __eq__(self, other):
 		if isinstance(other, PointJ):
 			if other.inf:
-				return self.inf
+				return bool(self.inf)
 			if self.inf:
-				return other.inf
+				return bool(other.inf)
 			# si aucun des deux points n'est l'infini
 			# alors...
 			u1 = self.x * (other.z ** 2)
 			u2 = other.x * (self.z ** 2)
 			s1 = self.y * (other.z ** 3)
-			s2 = other.x * (self.y ** 3)
+			s2 = other.y * (self.z ** 3)
 			return (u1 == u2) and (s1 == s2)
 		return False
+
 	def __add__(self, other):
 		if isinstance(other, PointJ):
+			if bool(self.inf):
+				return other.copy()
+			elif bool(other.inf):
+				return self.copy()
 			u1 = self.x * (other.z ** 2)
 			u2 = other.x * (self.z ** 2)
 			s1 = self.y * (other.z ** 3)
-			s2 = other.x * (self.y ** 3)
+			s2 = other.y * (self.z ** 3)
 			if u1 == u2:
-				if (s1 != s2):
+				if s1 != s2:
 					return PointJ(self.curve, PointJ.INFINITY)
 				else:
 					return self.double()
@@ -172,30 +181,46 @@ class PointJ:
 			x = r ** 2 - h ** 3 - 2 * u1 * (h ** 2)
 			y = r * (u1 * (h ** 2) - x) - s1 * (h ** 3)
 			z = h * self.z * other.z
-			return PointJ(self.curve, x, y, z)
- 		else:
+			return PointJ(self.curve, (x, y, z))
+		else:
 			return None
-	# double and add algorithm
+
+	# Double & Add algorithm
 	def __mul__(self, other):
 		if type(other) is int:
+			s = PointJ(self.curve, PointJ.INFINITY)
 			if other == 0:
-				return PointJ(self.curve, PointJ.INFINITY)
-			s = self
+				return s
+			m = self.copy()
 			while other > 0:
-				s = self.double()
 				if other & 1:
-					s += self
+					s += m
+				m = m.double()
 				other >>= 1
 			return s
+
+	def copy(self):
+		return PointJ(self.curve, (self.x, self.y, self.z))
+
 	def double(self):
-		if self.y == 0 or self.inf:
+		if self.inf or self.y == 0:
 			return PointJ(self.curve, PointJ.INFINITY)
 		s = 4 * self.x * (self.y ** 2)
-		m = 3 * (self.x ** 2) + a * (self.z ** 4)
+		m = 3 * (self.x ** 2) + self.curve.params.a * (self.z ** 4)
 		x2 = (m ** 2) - 2 * s
-		y2 = m * (s - x2) - 8 * (y ** 4)
+		y2 = m * (s - x2) - 8 * (self.y ** 4)
 		z2 = 2 * self.y * self.z
 		return PointJ(self.curve, (x2, y2, z2))
+
+	def __str__(self):
+		if bool(self.inf):
+			return '∞'
+		s = ''
+		s += 'x: ' + str(self.x) + '; '
+		s += 'y: ' + str(self.y) + '; '
+		s += 'z: ' + str(self.z)
+		return s
+
 
 class EllipticCurveJ:  # Courbes elliptiques, implémentation avec les coordonnées jacobiennes
 	def __init__(self, params):
@@ -204,13 +229,35 @@ class EllipticCurveJ:  # Courbes elliptiques, implémentation avec les coordonn�
 		self.g = PointJ(self, params.g)
 		self.infinity = PointJ(self, PointJ.INFINITY)
 
+	def __str__(self):
+		s = ''
+		s += 'p : ' + str(self.params.p) + '\n'
+		s += 'a : ' + str(self.params.a) + '\n'
+		s += 'b : ' + str(self.params.b) + '\n'
+		s += 'g : ' + str(self.g) + '\n'
+		s += 'ordre : ' + str(self.params.n) + '\n'
+		return s
+
 rfcExample = [ParamSet(mpz('0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF'),
 						mpz('-3'),
 						mpz('0x5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B'),
 						(mpz('0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296'), mpz('0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5')),
 						mpz('0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551'))]
 
-exampleCurve = EllipticCurveJ(rfcExample[0])
+exampleCurves = [EllipticCurveJ(rfcExample[0])]
+
+def doTests():
+	s = True
+	g = exampleCurves[0].g
+	s &= (g == g)
+	s &= (g + g != g)
+	s &= (g + g == g.double())
+	s &= (g + g + g == g.double() + g)
+	s &= (g + g + g == g * 3)
+	s &= (g + g != g * 3)
+	s &= ((g + g + g).double() == g * 6)
+	s &= (g * 4 == g + g + g + g)
+	return s
 
 
 
