@@ -102,12 +102,12 @@ class ParamSet:
 	# b: constante b de l'équation de la courbe
 	# g: générateur du sous-groupe
 	# n: ordre du sous-groupe généré par g
-	def __init__(self, p, a, b, g, n):
+	def __init__(self, p, a, b, g, order):
 		self.p = mpz(p)
 		self.a = mpz(a)
 		self.b = mpz(b)
 		self.g = (mpz(g[0]), mpz(g[1]))
-		self.n = mpz(n)
+		self.order = mpz(order)
 
 
 class ECPoint:
@@ -241,7 +241,7 @@ class EllipticCurveJ:  # Courbes elliptiques, implémentation avec les coordonn�
 		s += 'a : ' + str(self.params.a) + '\n'
 		s += 'b : ' + str(self.params.b) + '\n'
 		s += 'g : ' + str(self.g) + '\n'
-		s += 'ordre : ' + str(self.params.n) + '\n'
+		s += 'ordre : ' + str(self.params.order) + '\n'
 		return s
 
 rfcExample = ParamSet(mpz('0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF'),
