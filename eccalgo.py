@@ -11,7 +11,8 @@ import elliptic_curves
 
 class ECDHInstance:
 	def __init__(self, secret, curve):
-		assert(type(secret) == elliptic_curves.PointJ)
+		assert(type(secret) == int)
+		assert(type(curve) == elliptic_curves.EllipticCurveJ)
 		self.secret = secret
 		self.pubkey = curve.g * secret
 

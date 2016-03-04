@@ -278,7 +278,9 @@ nistExample = {'P-192': ParamSet(mpz('627710173538668076383578942320766641608390
 						mpz('6864797660130609714981900799081393217269435300143305409394463459185543183397655394245057746333217197532963996371363321113864768612440380340372808892707005449'))
 			   }
 
-exampleCurves = [EllipticCurveJ(rfcExample)]
+nistCurves = []
+for i in nistExample:
+	nistCurves.append(EllipticCurveJ(nistExample[i]))
 
 def singleTest(test, **kwargs):
 	for key, value in kwargs.items():
@@ -289,7 +291,7 @@ def singleTest(test, **kwargs):
 	return testresult
 
 def basicTests():
-	p = exampleCurves[0].g
+	p = nistCurves[0].g
 	singleTest('g == g', g=p)
 	singleTest('g + g != g', g=p)
 	singleTest('g + g == g.double()', g=p)
