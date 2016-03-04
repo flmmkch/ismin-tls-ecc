@@ -280,7 +280,6 @@ nistExample = {'P-192': ParamSet(mpz('627710173538668076383578942320766641608390
 
 exampleCurves = [EllipticCurveJ(rfcExample)]
 
-
 def singleTest(test, **kwargs):
 	for key, value in kwargs.items():
 		locals()[str(key)] = value
@@ -288,7 +287,6 @@ def singleTest(test, **kwargs):
 	if not testresult:
 		raise Exception('Test failed: ' + str(test))
 	return testresult
-
 
 def basicTests():
 	p = exampleCurves[0].g
