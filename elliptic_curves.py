@@ -130,18 +130,16 @@ class PointJ:
 		elif point == PointJ.INFINITY:
 			self.inf = True
 			self.curve = curve
-		elif type(point) == tuple and type(curve) == EllipticCurveJ:
+		elif type(curve) == EllipticCurveJ and type(point) == tuple:
 			self.curve = curve
 			if len(point) == 2:
-				affine_x = point[0]
-				affine_y = point[1]
-				self.x = mpz(affine_x)
-				self.y = mpz(affine_y)
-				self.z = 1
+				self.x = mpz(point[0]) % self.curve.params.p
+				self.y = mpz(point[1]) % self.curve.params.p
+				self.z = mpz(1)
 			elif len(point) == 3:
-				self.x = mpz(point[0])
-				self.y = mpz(point[1])
-				self.z = mpz(point[2])
+				self.x = mpz(point[0]) % self.curve.params.p
+				self.y = mpz(point[1]) % self.curve.params.p
+				self.z = mpz(point[2]) % self.curve.params.p
 			else:
 				raise Exception()
 
@@ -227,6 +225,12 @@ class PointJ:
 		s += 'z: ' + str(self.z)
 		return s
 
+	# Obtenir les coordonnées affines
+	def affine(self):
+		x = gmpy2.divexact(self.x, self.z ** 2)
+		y = gmpy2.divexact(self.y, self.z ** 3)
+		return x, y
+
 
 class EllipticCurveJ:  # Courbes elliptiques, implémentation avec les coordonnées jacobiennes
 	def __init__(self, params):
@@ -244,14 +248,14 @@ class EllipticCurveJ:  # Courbes elliptiques, implémentation avec les coordonn�
 		s += 'ordre : ' + str(self.params.order) + '\n'
 		return s
 
-rfcExample = ParamSet(mpz('0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF'),
+rfcParams = ParamSet(mpz('0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF'),
 						mpz('-3'),
 						mpz('0x5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B'),
 						(mpz('0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296'), mpz('0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5')),
 						mpz('0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551'))
 
 # Du document "RECOMMENDED ELLIPTIC CURVES FOR FEDERAL GOVERNMENT USE"
-nistExample = {'P-192': ParamSet(mpz('6277101735386680763835789423207666416083908700390324961279'),
+nistParams = {'P-192': ParamSet(mpz('6277101735386680763835789423207666416083908700390324961279'),
 						mpz('-3'),
 						mpz('0x64210519e59c80e70fa7e9ab72243049feb8deecc146b9b1'),
 						(mpz('0x188da80eb03090f67cbf20eb43a18800f4ff0afd82ff1012'), mpz('0x07192b95ffc8da78631011ed6b24cdd573f977a11e794811')),
@@ -303,9 +307,6 @@ def basicTests():
 	singleTest('g * 4 != g + g + g + g + g', g=p)
 	return True
 
-
-# do the tests each time the module is loaded?
-basicTests()
 
 
 
