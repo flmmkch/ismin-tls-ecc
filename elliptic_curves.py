@@ -117,11 +117,66 @@ class ECPoint:
 		self.curve = curve
 
 
+class FieldElement:
+	def __init__(self, value, field):
+		self.p = field
+		if type(value) == FieldElement:
+			self.v = value.v
+		else:
+			self.v = mpz(value) % field
+
+	def __add__(self, other):
+		if type(other) is FieldElement:
+			return FieldElement((self.v + other.v) % self.p, self.p)
+		return FieldElement((self.v + other) % self.p, self.p)
+
+	def __radd__(self, other):
+		if type(other) is FieldElement:
+			return FieldElement((other.v + self.v) % self.p, self.p)
+		return FieldElement((other + self.v) % self.p, self.p)
+
+	def __sub__(self, other):
+		if type(other) is FieldElement:
+			return FieldElement((self.v - other.v) % self.p, self.p)
+		return FieldElement((self.v - other) % self.p, self.p)
+
+	def __rsub__(self, other):
+		if type(other) is FieldElement:
+			return FieldElement((other.v - self.v) % self.p, self.p)
+		return FieldElement((other - self.v) % self.p, self.p)
+
+	def __mul__(self, other):
+		if type(other) is FieldElement:
+			return FieldElement((self.v * other.v) % self.p, self.p)
+		return FieldElement((self.v * other) % self.p, self.p)
+
+	def __rmul__(self, other):
+		if type(other) is FieldElement:
+			return FieldElement((self.v * other.v) % self.p, self.p)
+		return FieldElement((other * self.v) % self.p, self.p)
+
+	def __pow__(self, power, modulo=None):
+		if not modulo:
+			modulo = self.p
+		return FieldElement(gmpy2.powmod(self.v, power, modulo), self.p)
+
+	def __truediv__(self, other):
+		if type(other) is FieldElement:
+			return FieldElement(gmpy2.divexact(self.v, other.v), self.p)
+
+	def __eq__(self, other):
+		if type(other) is FieldElement:
+			return self.v == other.v
+
+	def __repr__(self):
+		return str(self.v)
+
 class PointJ:
 	INFINITY = -1
 
 	def __init__(self, curve, point=None):
 		self.inf = False
+		p = curve.params.p
 		if point is None:
 			self.curve = curve
 			self.x = curve.g.x
@@ -133,18 +188,17 @@ class PointJ:
 		elif type(curve) == EllipticCurveJ and type(point) == tuple:
 			self.curve = curve
 			if len(point) == 2:
-				self.x = mpz(point[0]) % self.curve.params.p
-				self.y = mpz(point[1]) % self.curve.params.p
-				self.z = mpz(1)
+				self.x = FieldElement(point[0], p)
+				self.y = FieldElement(point[1], p)
+				self.z = FieldElement(1, p)
 			elif len(point) == 3:
-				self.x = mpz(point[0]) % self.curve.params.p
-				self.y = mpz(point[1]) % self.curve.params.p
-				self.z = mpz(point[2]) % self.curve.params.p
+				self.x = FieldElement(point[0], p)
+				self.y = FieldElement(point[1], p)
+				self.z = FieldElement(point[2], p)
 			else:
 				raise Exception()
 
 	def __eq__(self, other):
-		p = self.curve.params.p
 		if isinstance(other, PointJ):
 			if other.inf:
 				return bool(self.inf)
@@ -152,24 +206,23 @@ class PointJ:
 				return bool(other.inf)
 			# si aucun des deux points n'est l'infini
 			# alors...
-			u1 = (self.x * gmpy2.powmod(other.z, 2, p)) % p
-			u2 = (other.x * gmpy2.powmod(self.z, 2, p)) % p
-			s1 = (self.y * gmpy2.powmod(other.z, 3, p)) % p
-			s2 = (other.y * gmpy2.powmod(self.z, 3, p)) % p
+			u1 = self.x * (other.z ** 2)
+			u2 = other.x * (self.z ** 2)
+			s1 = self.y * (other.z ** 3)
+			s2 = other.y * (self.z ** 3)
 			return (u1 == u2) and (s1 == s2)
 		return False
 
 	def __add__(self, other):
-		p = self.curve.params.p
 		if isinstance(other, PointJ):
 			if bool(self.inf):
 				return other.copy()
 			elif bool(other.inf):
 				return self.copy()
-			u1 = (self.x * gmpy2.powmod(other.z, 2, p)) % p
-			u2 = (other.x * gmpy2.powmod(self.z, 2, p)) % p
-			s1 = (self.y * gmpy2.powmod(other.z, 3, p)) % p
-			s2 = (other.y * gmpy2.powmod(self.z, 3, p)) % p
+			u1 = self.x * (other.z ** 2)
+			u2 = other.x * (self.z ** 2)
+			s1 = self.y * (other.z ** 3)
+			s2 = other.y * (self.z ** 3)
 			if u1 == u2:
 				if s1 != s2:
 					return PointJ(self.curve, PointJ.INFINITY)
@@ -198,6 +251,9 @@ class PointJ:
 				m = m.double()
 				other >>= 1
 			return s
+
+	def __rmul__(self, other):
+		return self * other
 
 	def __neg__(self):
 		return PointJ(self.curve, (self.x, -self.y, self.z))
@@ -229,8 +285,8 @@ class PointJ:
 
 	# Obtenir les coordonnées affines
 	def affine(self):
-		x = gmpy2.divexact(self.x, self.z ** 2)
-		y = gmpy2.divexact(self.y, self.z ** 3)
+		x = self.x / (self.z ** 2)
+		y = self.y / (self.z ** 3)
 		return x, y
 
 
@@ -307,6 +363,7 @@ def basicTests():
 	singleTest('(g + g + g).double() == g * 6', g=p)
 	singleTest('g * 4 == g + g + g + g', g=p)
 	singleTest('g * 4 != g + g + g + g + g', g=p)
+	singleTest('(g * 46) + (13 * g) == (g * 13) + (46 * g)', g=p)
 	return True
 
 
