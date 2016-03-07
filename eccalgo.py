@@ -20,13 +20,13 @@ class ECDHInstance:
 		self.pubkey = curve.g * secret
 
 	def sharedsecret(self, otherpubkey):
-		return (otherpubkey * self.secret).affine()[0]
+		return (otherpubkey * self.secret).affine()
 
 
 def ecdhtests(curveid=0):
 	curve = ec.nistCurves[curveid]
-	partyA = ECDHInstance(curve)
-	partyB = ECDHInstance(curve)
-	sharedsecret1 = partyA.sharedsecret(partyB.pubkey)
-	sharedsecret2 = partyB.sharedsecret(partyA.pubkey)
+	partya = ECDHInstance(curve)
+	partyb = ECDHInstance(curve)
+	sharedsecret1 = partya.sharedsecret(partyb.pubkey)
+	sharedsecret2 = partyb.sharedsecret(partya.pubkey)
 	return sharedsecret1 == sharedsecret2

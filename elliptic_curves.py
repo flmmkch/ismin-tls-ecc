@@ -162,7 +162,7 @@ class FieldElement:
 
 	def __truediv__(self, other):
 		if type(other) is FieldElement:
-			return FieldElement(gmpy2.divexact(self.v, other.v), self.p)
+			return FieldElement(gmpy2.divm(self.v, other.v, self.p), self.p)
 
 	def __eq__(self, other):
 		if type(other) is FieldElement:
