@@ -10,9 +10,12 @@ import elliptic_curves as ec
 
 
 class ECDHInstance:
-	def __init__(self, secret, curve):
-		assert(type(secret) == int)
+	def __init__(self, curve, secret=None):
 		assert(type(curve) == ec.EllipticCurveJ)
+		if secret:
+			assert(type(secret) == int)
+		else:
+			secret = Sr().randint(1, (curve.params.order - 1))
 		self.secret = secret
 		self.pubkey = curve.g * secret
 
@@ -20,18 +23,10 @@ class ECDHInstance:
 		return (otherpubkey * self.secret).affine()[0]
 
 
-class ECDH:
-	@staticmethod
-	def initiate(curve):
-		assert(type(curve) == ec.EllipticCurveJ)
-		secret = Sr().randint(1, (curve.params.order - 1))
-		return ECDHInstance(secret, curve)
-
-
-def basicTests(curveid = 0):
+def ecdhtests(curveid=0):
 	curve = ec.nistCurves[curveid]
-	partyA = ECDH.initiate(curve)
-	partyB = ECDH.initiate(curve)
+	partyA = ECDHInstance(curve)
+	partyB = ECDHInstance(curve)
 	sharedsecret1 = partyA.sharedsecret(partyB.pubkey)
 	sharedsecret2 = partyB.sharedsecret(partyA.pubkey)
 	return sharedsecret1 == sharedsecret2

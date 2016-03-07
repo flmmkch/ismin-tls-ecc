@@ -121,7 +121,7 @@ class FieldElement:
 	def __init__(self, value, field):
 		self.p = field
 		if type(value) == FieldElement:
-			self.v = value.v
+			self.v = value.v % field
 		else:
 			self.v = mpz(value) % field
 
@@ -166,10 +166,15 @@ class FieldElement:
 
 	def __eq__(self, other):
 		if type(other) is FieldElement:
-			return self.v == other.v
+			return self.v == other.v and self.p == other.p
+		return self.v == (other % self.p)
 
 	def __repr__(self):
 		return str(self.v)
+
+	def __int__(self):
+		return int(self.v)
+
 
 class PointJ:
 	INFINITY = -1
@@ -344,27 +349,44 @@ nistCurves = []
 for i in nistParams:
 	nistCurves.append(EllipticCurveJ(nistParams[i]))
 
-def singleTest(test, **kwargs):
+
+def singletest(test, **kwargs):
 	for key, value in kwargs.items():
 		locals()[str(key)] = value
-	testresult = bool(eval(test))
+	testresult = eval(test)
 	if not testresult:
 		raise Exception('Test failed: ' + str(test))
+	print(test + ' : OK')
 	return testresult
 
-def basicTests():
+
+def curvetests():
 	p = nistCurves[0].g
-	singleTest('g == g', g=p)
-	singleTest('g + g != g', g=p)
-	singleTest('g + g == g.double()', g=p)
-	singleTest('g + g + g == g.double() + g', g=p)
-	singleTest('g + g + g == g * 3', g=p)
-	singleTest('g + g != g * 3', g=p)
-	singleTest('(g + g + g).double() == g * 6', g=p)
-	singleTest('g * 4 == g + g + g + g', g=p)
-	singleTest('g * 4 != g + g + g + g + g', g=p)
-	singleTest('(g * 46) + (13 * g) == (g * 13) + (46 * g)', g=p)
+	singletest('g == g', g=p)
+	singletest('g + g != g', g=p)
+	singletest('g + g == g.double()', g=p)
+	singletest('g + g + g == g.double() + g', g=p)
+	singletest('g + g + g == g * 3', g=p)
+	singletest('g + g != g * 3', g=p)
+	singletest('(g + g + g).double() == g * 6', g=p)
+	singletest('g * 4 == g + g + g + g', g=p)
+	singletest('g * 4 != g + g + g + g + g', g=p)
+	singletest('(g * 46) + (13 * g) == (g * 13) + (46 * g)', g=p)
 	return True
+
+
+def fieldtests(p=91):
+	x = FieldElement(SR().randint(0, p - 1), p)
+	y = FieldElement(SR().randint(0, p - 1), p)
+
+	singletest('x + x == 2 * x', x=x)
+	singletest('x + x + y == y + 2 * x', x=x, y=y)
+	singletest('(p + x) == x', x=x, p=p)
+	singletest('x ** 3 == ' + str(int(x) ** 3), x=x)
+	singletest('x ** 3 == ' + str(x ** 3), x=x)
+	singletest('x ** 3 != 1 + ' + str(x ** 3), x=x)
+	return True
+
 
 
 
