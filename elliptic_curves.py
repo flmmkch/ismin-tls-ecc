@@ -144,6 +144,7 @@ class PointJ:
 				raise Exception()
 
 	def __eq__(self, other):
+		p = self.curve.params.p
 		if isinstance(other, PointJ):
 			if other.inf:
 				return bool(self.inf)
@@ -151,23 +152,24 @@ class PointJ:
 				return bool(other.inf)
 			# si aucun des deux points n'est l'infini
 			# alors...
-			u1 = self.x * (other.z ** 2)
-			u2 = other.x * (self.z ** 2)
-			s1 = self.y * (other.z ** 3)
-			s2 = other.y * (self.z ** 3)
+			u1 = (self.x * gmpy2.powmod(other.z, 2, p)) % p
+			u2 = (other.x * gmpy2.powmod(self.z, 2, p)) % p
+			s1 = (self.y * gmpy2.powmod(other.z, 3, p)) % p
+			s2 = (other.y * gmpy2.powmod(self.z, 3, p)) % p
 			return (u1 == u2) and (s1 == s2)
 		return False
 
 	def __add__(self, other):
+		p = self.curve.params.p
 		if isinstance(other, PointJ):
 			if bool(self.inf):
 				return other.copy()
 			elif bool(other.inf):
 				return self.copy()
-			u1 = self.x * (other.z ** 2)
-			u2 = other.x * (self.z ** 2)
-			s1 = self.y * (other.z ** 3)
-			s2 = other.y * (self.z ** 3)
+			u1 = (self.x * gmpy2.powmod(other.z, 2, p)) % p
+			u2 = (other.x * gmpy2.powmod(self.z, 2, p)) % p
+			s1 = (self.y * gmpy2.powmod(other.z, 3, p)) % p
+			s2 = (other.y * gmpy2.powmod(self.z, 3, p)) % p
 			if u1 == u2:
 				if s1 != s2:
 					return PointJ(self.curve, PointJ.INFINITY)
@@ -283,8 +285,8 @@ nistParams = {'P-192': ParamSet(mpz('6277101735386680763835789423207666416083908
 			   }
 
 nistCurves = []
-for i in nistExample:
-	nistCurves.append(EllipticCurveJ(nistExample[i]))
+for i in nistParams:
+	nistCurves.append(EllipticCurveJ(nistParams[i]))
 
 def singleTest(test, **kwargs):
 	for key, value in kwargs.items():
