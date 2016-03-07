@@ -20,7 +20,7 @@ class ECDHInstance:
 		self.pubkey = curve.g * secret
 
 	def sharedsecret(self, otherpubkey):
-		return (otherpubkey * self.secret).affine()
+		return (otherpubkey * self.secret).affine()[0]
 
 
 def ecdhtests(curveid=0):
