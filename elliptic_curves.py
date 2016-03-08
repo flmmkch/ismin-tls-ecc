@@ -35,64 +35,6 @@ def mod_inverse(n, modulo):
 	return u[-1]
 
 
-# Courbe elliptique, implementation naive
-# ici ce n'est pas sur un corps fini en particulier
-class EllipticCurveCartesian:
-	# Définie par l'équation suivante
-	# y^2 = x^3 + a * x + b ou x, y, a, b sont des elements de Fp
-	# et le discriminant n'est pas nul
-	def __init__(self, a, b, precision = 64):
-		self.a = mpz(a)
-		self.b = mpz(b)
-		self.precision = precision
-		# Calcul du discriminant
-		self.discriminant = 4 * self.a ** 3 + 27 * self.b ** 2 # opérateur **: exponentiation
-
-	def random_point(self):
-		# On trouve un x aleatoire
-		x = mpz(random_bits(self.precision))
-		# On calcule y^2
-		y2 = x ** 3 + self.a * x + self.b
-		y = gmpy2.isqrt(y2)
-		if random_bits(1): # on prend aleatoirement l'oppose de y
-			y = -y
-		return x, y
-
-	def double(self, m):
-		if m is None or m[1] == 0: # si y est nul
-			return None
-		# sinon si y non nul
-		x = ((3 * m[0] ** 2 + self.a) / (2 * m[1])) ** 2 - 2 * m[0]
-		y = (m[0] - m[1]) * (3 * m[0] ** 2 + self.a) / (2 * m[1]) - m[1]
-		return mpz(x), mpz(y)
-
-	def add(self, m, n):
-		if m is None: # le point a l'infini (représenté ici par None.. à améliorer) est l'élément neutre du groupe additif
-			return n
-		if n is None:
-			return m
-		if m != n:  # si deux points differents
-			if m[0] == n[0]: # et x1 == x2
-				return None
-			# sinon, dans le cas ou x1 =/= x2
-			x3 = ((n[1] - m[1]) / (n[0] - m[0])) ** 2 - n[0] - m[0]
-			y3 = (m[0] - x3) * (n[1] - m[1]) / (n[0] - m[0]) - m[1]
-			return mpz(x3), mpz(y3)
-		# sinon, si les deux points sont égaux
-		return self.double(m)
-
-	def mul(self, m, e):  # algorithme square & multiply: e est ici "l'exponent"
-		if e == 0 or m is None:
-			return None
-		s = None
-		while e > 0:
-			s = self.double(s)
-			if e & 1:
-				s = self.add(s, m)
-			e >>= 1
-		return s
-
-
 class ParamSet:
 	# Voir section 3.3 du RFC6090
 	# nombre premier p qui indique l'ordre du corps fini Fp
@@ -108,13 +50,6 @@ class ParamSet:
 		self.b = mpz(b)
 		self.g = (mpz(g[0]), mpz(g[1]))
 		self.order = mpz(order)
-
-
-class ECPoint:
-	def __init__(self, x, y, curve):
-		self.x = x
-		self.y = y
-		self.curve = curve
 
 
 class FieldElement:

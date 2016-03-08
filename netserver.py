@@ -1,12 +1,12 @@
 #!/usr/bin/python3
 
 import socket
-import elliptic_curves
-import eccalgo
+import elliptic_curves as ec
+import eccalgo as ecc
 from Crypto.Cipher import AES
 
-curve = elliptic_curves.exampleCurves[0]
-secret, message = eccalgo.ECDH.initiate(curve)
+curve = ec.nistCurves[0]
+ecdh = ecc.ECDHInstance(curve)
 
 s = socket.socket()
 host = socket.gethostname()		# Get local machine name
