@@ -109,7 +109,7 @@ class DataVector(DataElem):
 		s += (self.size - self.floor).to_bytes(nbytes(self.sizerange), byteorder=DataElem.order)
 		# then write the elements
 		for elem in range(self.size):
-			s += elem.to_bytes()
+			s += self.value[elem].to_bytes()
 		return s
 
 
