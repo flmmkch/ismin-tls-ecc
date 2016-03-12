@@ -173,7 +173,7 @@ def cipher(plaintext, w, s_box, poly_mat, nb_ronde_max=9, **dict):
 		verbose = True
 	else:
 		verbose = False
-	if ( not isinstance(plaintext,np.ndarray)) | plaintext.size != 16 :
+	if ( not isinstance(plaintext, np.ndarray)) | plaintext.size != 16 :
 		raise Exception('Plaintext has to be a vector (not a cell array) with 16 elements.')
 	if np.any(plaintext < 0) | np.any(plaintext > 255):
 		raise Exception('Elements of plaintext vector have to be bytes (0 <= plaintext(i) <= 255).')
@@ -208,7 +208,7 @@ def cipher(plaintext, w, s_box, poly_mat, nb_ronde_max=9, **dict):
 	state = sub_bytes(state, s_box)
 	if verbose:
 		print('Round ' + str(nb_ronde_max + 1) + ' après sub_bytes: ' + str(state))
-	state = shift_rows (state)
+	state = shift_rows(state)
 	if verbose:
 		print('Round ' + str(nb_ronde_max + 1) + ' après shift_rows: ' + str(state))
 	round_key = w[40:44].T
