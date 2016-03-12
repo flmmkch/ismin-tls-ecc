@@ -10,6 +10,7 @@ import struct
 
 from enum import Enum
 
+import math
 
 class DataElem:
 	defaultvalue = 0
@@ -74,11 +75,12 @@ class DataStruct(DataElem):
 
 
 def nbytes(e):
-	s = (e.nbits() // 8) + 1
-	return len(s)
+	if e == 0:
+		return 1
+	return int(math.ceil(e.bit_length() / 8))
 
 
-class VariableLengthVector(DataElem):
+class DataVector(DataElem):
 	def __init__(self, dtype, ceiling, floor=0):
 		assert(issubclass(dtype, DataElem))
 		self.ceiling = ceiling
@@ -92,7 +94,7 @@ class VariableLengthVector(DataElem):
 		i = 0
 		# first read the size
 		i += nbytes(self.sizerange)
-		self.size = int.from_bytes(newvalue[:i], byteorder=DataElem.order)
+		self.size = self.floor + int.from_bytes(newvalue[:i], byteorder=DataElem.order)
 		# then read the elements
 		self.value = []
 		for elem in range(self.size):
@@ -104,7 +106,10 @@ class VariableLengthVector(DataElem):
 	def to_bytes(self):
 		s = b''
 		# first write the size
+		s += (self.size - self.floor).to_bytes(nbytes(self.sizerange), byteorder=DataElem.order)
 		# then write the elements
+		for elem in range(self.size):
+			s += elem.to_bytes()
 		return s
 
 
@@ -188,10 +193,73 @@ class ConnectionState:
 		self.serverRandom = b''  # fourni par le serveur
 
 
+class Uint8(DataElem):
+	def __init__(self, value=0):
+		super().__init__(1, value)
+
+
+class Uint16(DataElem):
+	def __init__(self, value=0):
+		super().__init__(2, value)
+
+
+class Uint24(DataElem):
+	def __init__(self, value=0):
+		super().__init__(3, value)
+
+
+class Uint32(DataElem):
+	def __init__(self, value=0):
+		super().__init__(4, value)
+
+
+class Uint64(DataElem):
+	def __init__(self, value=0):
+		super().__init__(8, value)
+
+
+class Opaque(DataArray):
+	def __init__(self, size=1):
+		super().__init__(1, size)
+
+
 class ProtocolVersion(DataStruct):
 	def __init__(self):
-		super().__init__((DataElem(1), DataElem(1)), ('major', 'minor'))
+		super().__init__((Uint8(), Uint8()), ('major', 'minor'))
+		# default: TLS 1.2
+		# TLS 1.2 → (3, 3)
+		self.major.value = 3
+		self.minor.value = 3
 
+
+class RecordContentType(DataElem):
+	change_cipher_spec = 20
+	alert = 21
+	handshake = 22
+	application_data = 23
+
+	def __init__(self, value=None):
+		super().__init__(1)
+		if value:
+			self.value = value
+
+
+class TLSPlainText(DataStruct):
+	def __init__(self, length):
+		super().__init__((RecordContentType(), ProtocolVersion(), Uint16(length), Opaque(length)),
+						('type', 'version', 'length', 'fragment'))
+
+
+class TLSCompressed(DataStruct):
+	def __init__(self, length):
+		super().__init__((RecordContentType(), ProtocolVersion(), Uint16(length), Opaque(length)),
+						('type', 'version', 'length', 'fragment'))
+
+
+class TLSCipherText(DataStruct):
+	def __init__(self, length):
+		super().__init__((RecordContentType(), ProtocolVersion(), Uint16(length), Opaque(length)),
+						('type', 'version', 'length', 'fragment'))
 
 #class RecordLayerMsg(DataArray):
 
