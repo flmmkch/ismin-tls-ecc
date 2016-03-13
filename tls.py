@@ -8,8 +8,6 @@ import struct
 
 # TLS 1.2
 
-from enum import Enum
-
 import math
 
 class DataElem:
@@ -33,6 +31,15 @@ class DataElem:
 		if isinstance(self.value, bytes):
 			return self.value[:self.length]
 		return self.value.to_bytes(self.length, byteorder=DataElem.order)
+
+	def __eq__(self, other):
+		s = self.to_bytes()
+		if isinstance(other, DataElem):
+			return s == other.to_bytes()
+		elif isinstance(other, bytes):
+			return s == other
+		elif isinstance(other, int):
+			return s == int.from_bytes(s, byteorder=DataElem.order)
 
 
 class DataArray(DataElem):
@@ -113,86 +120,6 @@ class DataVector(DataElem):
 		return s
 
 
-class Common:
-		HELLO_REQUEST = b'\x00'  # server-originated initiation of the negotiation process
-		CLIENT_HELLO = b'\x01'
-		SERVER_HELLO = b'\x02'
-		CERTIFICATE = b'\x0B'
-		SERVER_KEY_EXCHANGE = b'\x0C'
-		CERTIFICATE_REQUEST = b'\x0D'
-		CERTIFICATE_VERIFY = b'\x0E'
-		SERVER_HELLO_DONE = b'\x0F'
-		CLIENT_KEY_EXCHANGE = b'\x10'
-		HANDSHAKE_FINISHED = b'\x20'
-		# What's in a clientHello:
-		# - ProtocolVersion
-		# - Random {uint32 unix_time, byte[28] random_bytes}
-		# - SessionID
-		# - CipherSuite cipher_suites
-		# - CompressionMethod compression_methods
-		# - Extension extension
-
-
-class ConnectionEnd(Enum):
-	server = 0
-	client = 1
-
-
-class PRFAlgorithm(Enum):
-	tls_prf_sha256 = 0
-
-
-class PRFAlgorithm(Enum):
-	tls_prf_sha256 = 0
-
-
-class BulkCipherAlgorithm(Enum):
-	null = 0
-	rc4 = 1
-	tripledes = 2
-	aes = 3
-
-
-class CipherType(Enum):
-	stream = 0
-	block = 1
-	aead = 2
-
-
-class MACAlgorithm(Enum):
-	null = 0
-	hmac_md5 = 1
-	hmac_sha1 = 2
-	hmac_sha256 = 3
-	hmac_sha384 = 4
-	hmac_sha512 = 5
-
-
-class CompressionMethod(Enum):
-	null = 0
-
-
-# cf. RFC 5246 p. 18
-class ConnectionState:
-	def __init__(self, connectionend):
-		assert(isinstance(connectionend, ConnectionEnd))
-		self.connectionEnd = connectionend
-		self.PRFalgo = PRFAlgorithm()  # cf. RFC 5246 p. 16
-		self.cipherType = CipherType()
-		self.blockCipher = BulkCipherAlgorithm()
-		self.enc_key_length = 0  # uint8
-		self.block_length = 0  # uint8
-		self.fixed_iv_length = 0  # uint8
-		self.record_iv_length = 0  # uint8
-		self.MACalgo = MACAlgorithm()
-		self.mac_length = 0  # uint8
-		self.mac_key_length = 0  # uint8
-		self.compressionalgo = CompressionMethod()  # idem ^
-		self.masterSecret = b''  # secret partagé de 48 octets
-		self.clientRandom = b''  # fourni par le client
-		self.serverRandom = b''  # fourni par le serveur
-
-
 class Uint8(DataElem):
 	def __init__(self, value=0):
 		super().__init__(1, value)
@@ -223,13 +150,120 @@ class Opaque(DataArray):
 		super().__init__(1, size)
 
 
-class ProtocolVersion(DataStruct):
+class ConnectionEnd(Uint8):
+	server = 0
+	client = 1
+
+
+class PRFAlgorithm(Uint8):
+	tls_prf_sha256 = 0
+
+
+class PRFAlgorithm(Uint8):
+	tls_prf_sha256 = 0
+
+
+class BulkCipherAlgorithm(Uint8):
+	null = 0
+	rc4 = 1
+	tripledes = 2
+	aes = 3
+
+
+class CipherType(Uint8):
+	stream = 0
+	block = 1
+	aead = 2
+
+
+class MACAlgorithm(Uint8):
+	null = 0
+	hmac_md5 = 1
+	hmac_sha1 = 2
+	hmac_sha256 = 3
+	hmac_sha384 = 4
+	hmac_sha512 = 5
+
+
+class CompressionMethod(Uint8):
+	null = 0
+
+
+class HashAlgorithm(Uint8):
+	null = 0
+	md5 = 1
+	sha1 = 2
+	sha224 = 3
+	sha256 = 4
+	sha384 = 5
+	sha512 = 6
+
+
+class SignatureAlgorithm(Uint8):
+	anonymous = 0
+	rsa = 1
+	dsa = 2
+	ecdsa = 3
+
+
+class SignatureAndHashAlgorithm(DataStruct):
+	def __init__(self, hashval=HashAlgorithm.null, sigval=SignatureAlgorithm.anonymous):
+		super().__init__((HashAlgorithm(hashval), SignatureAlgorithm(sigval)), ('hash', 'signature'))
+
+
+# cf. RFC 5246 p. 18
+class ConnectionState:
+	def __init__(self, connectionend):
+		assert(isinstance(connectionend, ConnectionEnd))
+		self.connectionEnd = connectionend
+		self.PRFalgo = PRFAlgorithm()  # cf. RFC 5246 p. 16
+		self.cipherType = CipherType()
+		self.blockCipher = BulkCipherAlgorithm()
+		self.enc_key_length = 0  # uint8
+		self.block_length = 0  # uint8
+		self.fixed_iv_length = 0  # uint8
+		self.record_iv_length = 0  # uint8
+		self.MACalgo = MACAlgorithm()
+		self.mac_length = 0  # uint8
+		self.mac_key_length = 0  # uint8
+		self.compressionalgo = CompressionMethod()  # idem ^
+		self.masterSecret = b''  # secret partagé de 48 octets
+		self.clientRandom = b''  # fourni par le client
+		self.serverRandom = b''  # fourni par le serveur
+
+
+class Entity:
+	def __init__(self, cend):
+		self.state = ConnectionState(cend)
+
+
+class Client(Entity):
 	def __init__(self):
+		super().__init__(ConnectionEnd(ConnectionEnd.client))
+
+
+class Server(Entity):
+	def __init__(self):
+		super().__init__(ConnectionEnd(ConnectionEnd.server))
+
+
+# Data structure for cryptographic attributes
+
+class DigitallySigned(DataStruct):
+	def __init__(self):
+		super().__init__((SignatureAndHashAlgorithm(), DataVector(Uint8, (2**16-1))), ('algorithm', 'signature'))
+
+
+
+# TLS data structures
+
+class ProtocolVersion(DataStruct):
+	def __init__(self, major, minor):
 		super().__init__((Uint8(), Uint8()), ('major', 'minor'))
 		# default: TLS 1.2
 		# TLS 1.2 → (3, 3)
-		self.major.value = 3
-		self.minor.value = 3
+		self.major.value = major
+		self.minor.value = minor
 
 
 class RecordContentType(DataElem):
@@ -256,11 +290,85 @@ class TLSCompressed(DataStruct):
 						('type', 'version', 'length', 'fragment'))
 
 
+# Classes de cipher: a corriger au niveau des structures de données cryptographiques...
+class GenericStreamCipher(DataStruct):
+	def __init__(self, entity: Entity, length):
+		super().__init__((Opaque(length), Opaque(entity.state.mac_length)),
+						('content', 'MAC'))
+
+
+class GenericBlockCipher(DataStruct):
+	def __init__(self, entity: Entity, length):
+		super().__init__((Opaque(entity.state.record_iv_length), Opaque(length), DataArray(entity.state.mac_length, 1),
+																				Uint8()),
+						('IV', 'content', 'MAC', 'padding', 'padding_length'))
+
+
+class GenericAEADCipher(DataStruct):
+	def __init__(self, entity: Entity, length):
+		super().__init__((Opaque(entity.state.record_iv_length), Opaque(length)),
+						('nonce_explicit', 'content'))
+
+
 class TLSCipherText(DataStruct):
-	def __init__(self, length):
-		super().__init__((RecordContentType(), ProtocolVersion(), Uint16(length), Opaque(length)),
+	def __init__(self, entity: Entity, length):
+		if entity.state.cipherType == CipherType.stream:
+			fragmentObject = GenericStreamCipher(entity, length)
+		elif entity.state.cipherType == CipherType.block:
+			fragmentObject = GenericBlockCipher(entity, length)
+		elif entity.state.cipherType == CipherType.aead:
+			fragmentObject = GenericAEADCipher(entity, length)
+		super().__init__((RecordContentType(), ProtocolVersion(), Uint16(length), fragmentObject),
 						('type', 'version', 'length', 'fragment'))
 
+
+class ChangeCipherSpec(DataStruct):
+	change_cipher_spec = 1
+
+	def __init__(self):
+		super().__init__((Uint8(ChangeCipherSpec.change_cipher_spec),), ('type',))
+
+
+class AlertLevel(Uint8):
+	warning = 1
+	fatal = 2
+
+	def __init__(self, value=warning):
+		super().__init__(value)
+
+
+class AlertDescription(Uint8):
+	close_notify = 0
+	unexpected_message = 10
+	bad_record_mac = 20
+	decryption_failed_RESERVED = 21
+	handshake_failure = 40
+	no_certificated_RESERVED = 41
+	bad_certificate = 42
+	unsupported_certificate = 43
+	certificate_revoked = 44
+	certificate_expired = 45
+	certificate_unknown = 46
+	illegal_parameter = 47
+	unknown_ca = 48
+	access_denied = 49
+	decode_error = 50
+	decrypt_error = 51
+	export_restriction_RESERVED = 60
+	protocol_version = 70
+	insufficient_security = 71
+	internal_error = 80
+	user_canceled = 90
+	no_renegotiation = 100
+	unsupported_extension = 110
+
+	def __init__(self, value=internal_error):
+		super().__init__(value)
+
+
+class Alert(DataStruct):
+	def __init__(self, level=AlertLevel.warning, description=AlertDescription.internal_error):
+		super().__init__((AlertLevel(level), AlertDescription(description)), ('level', 'description'))
 #class RecordLayerMsg(DataArray):
 
 
