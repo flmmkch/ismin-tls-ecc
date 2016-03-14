@@ -226,7 +226,7 @@ class PointJ:
 	def affine(self):
 		x = self.x / (self.z ** 2)
 		y = self.y / (self.z ** 3)
-		return x, y
+		return x.v, y.v
 
 
 class EllipticCurveJ:  # Courbes elliptiques, implémentation avec les coordonnées jacobiennes

@@ -59,12 +59,12 @@ def verifysignature(curve, pubkey, signature, message, hashalgo=SHA256):
 	r, s = pubkey
 	w = gmpy2.divm(1, int(s), n)
 	u1 = (z * w) % n
-	u2 = (int(r) * w) % n
+	u2 = (r * w) % n
 	resultpoint = curve.g * u1
 	resultpoint += publickeypoint * u2
-	x1 = resultpoint.affine()[0].v
-	r = r.v
-	return (x1 - r) % n == 0  # on doit avoir r ≡ x1 (mod n)
+	x1 = resultpoint.affine()[0]
+	result = (x1 - r) % n
+	return result == 0, result  # on doit avoir r ≡ x1 (mod n)
 
 
 def ecdhtests(curve=ec.nistCurves[0]):
