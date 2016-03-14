@@ -180,17 +180,16 @@ class PointJ:
 
 	# Double & Add algorithm
 	def __mul__(self, other):
-		if type(other) is int:
-			s = PointJ(self.curve, PointJ.INFINITY)
-			if other == 0:
-				return s
-			m = self.copy()
-			while other > 0:
-				if other & 1:
-					s += m
-				m = m.double()
-				other >>= 1
+		s = PointJ(self.curve, PointJ.INFINITY)
+		if other == 0:
 			return s
+		m = self.copy()
+		while other > 0:
+			if other & 1:
+				s += m
+			m = m.double()
+			other >>= 1
+		return s
 
 	def __rmul__(self, other):
 		return self * other

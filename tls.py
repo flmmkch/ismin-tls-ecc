@@ -3,12 +3,12 @@
 # Just using the random module isn't enough
 # Use SystemRandom() for a cryptographically secure RNG
 
-from random import SystemRandom as SR
-import struct
-
 # TLS 1.2
 
+import os
+import time
 import math
+
 
 class DataElem:
 	defaultvalue = 0
@@ -28,7 +28,11 @@ class DataElem:
 		return self.length
 
 	def to_bytes(self):
+		# Ne retourner que le nombre d'octets donné
 		if isinstance(self.value, bytes):
+			if len(self.value) < self.length:
+				return self.value + b'\x00' * (self.length - len(self.value))  # padding (en big endian)
+			# sinon, on retourne le bon nombre
 			return self.value[:self.length]
 		return self.value.to_bytes(self.length, byteorder=DataElem.order)
 
@@ -57,7 +61,7 @@ class DataArray(DataElem):
 	def to_bytes(self):
 		s = b''
 		for elem in range(self.size):
-			s += self.value[s].to_bytes()
+			s += self.value[elem].to_bytes()
 		return s
 
 
@@ -120,27 +124,35 @@ class DataVector(DataElem):
 		return s
 
 
-class Uint8(DataElem):
+class Uint(DataElem):
+	def __init__(self, size, value=0):
+		super().__init__(size, value)
+
+	def __int__(self):
+		return int.from_bytes(self.value, byteorder=DataElem.order, signed=False)
+
+
+class Uint8(Uint):
 	def __init__(self, value=0):
 		super().__init__(1, value)
 
 
-class Uint16(DataElem):
+class Uint16(Uint):
 	def __init__(self, value=0):
 		super().__init__(2, value)
 
 
-class Uint24(DataElem):
+class Uint24(Uint):
 	def __init__(self, value=0):
 		super().__init__(3, value)
 
 
-class Uint32(DataElem):
+class Uint32(Uint):
 	def __init__(self, value=0):
 		super().__init__(4, value)
 
 
-class Uint64(DataElem):
+class Uint64(Uint):
 	def __init__(self, value=0):
 		super().__init__(8, value)
 
@@ -254,9 +266,7 @@ class DigitallySigned(DataStruct):
 		super().__init__((SignatureAndHashAlgorithm(), DataVector(Uint8, (2**16-1))), ('algorithm', 'signature'))
 
 
-
 # TLS data structures
-
 class ProtocolVersion(DataStruct):
 	def __init__(self, major, minor):
 		super().__init__((Uint8(), Uint8()), ('major', 'minor'))
@@ -313,12 +323,14 @@ class GenericAEADCipher(DataStruct):
 class TLSCipherText(DataStruct):
 	def __init__(self, entity: Entity, length):
 		if entity.state.cipherType == CipherType.stream:
-			fragmentObject = GenericStreamCipher(entity, length)
+			fragment = GenericStreamCipher(entity, length)
 		elif entity.state.cipherType == CipherType.block:
-			fragmentObject = GenericBlockCipher(entity, length)
+			fragment = GenericBlockCipher(entity, length)
 		elif entity.state.cipherType == CipherType.aead:
-			fragmentObject = GenericAEADCipher(entity, length)
-		super().__init__((RecordContentType(), ProtocolVersion(), Uint16(length), fragmentObject),
+			fragment = GenericAEADCipher(entity, length)
+		else:
+			raise Exception("Invalid cipher type")
+		super().__init__((RecordContentType(), ProtocolVersion(), Uint16(length), fragment),
 						('type', 'version', 'length', 'fragment'))
 
 
@@ -369,7 +381,123 @@ class AlertDescription(Uint8):
 class Alert(DataStruct):
 	def __init__(self, level=AlertLevel.warning, description=AlertDescription.internal_error):
 		super().__init__((AlertLevel(level), AlertDescription(description)), ('level', 'description'))
-#class RecordLayerMsg(DataArray):
+
+
+class RandomStruct(DataStruct):
+	def __init__(self, gut=0, randb=(b'\x00' * 28)):
+		super().__init__((Uint32(gut), Opaque(28)), ('gmt_unix_time', 'random_bytes'))
+		self.random_bytes.read(randb)
+
+	@staticmethod
+	def generate():
+		gut = int(time.time())
+		randb = os.urandom(28)
+		return RandomStruct(gut, randb)
+
+
+class SessionID(DataVector):
+	def __init__(self):
+		super().__init__(Uint8, 32)
+
+
+class HandshakeType(Uint8):
+	hello_request = 0
+	client_hello = 1
+	server_hello = 2
+	certificate = 11
+	server_key_exchange = 12
+	certificate_request = 13
+	server_hello_done = 14
+	certificate_verify = 15
+	client_key_exchange = 16
+	finished = 20
+
+	def __init__(self, value=hello_request):
+		super().__init__(value)
+
+
+class HelloRequest(DataStruct):
+	def __init__(self):
+		super().__init__(())  # structure vide (cf RFC5246, p. 39)
+
+
+class ClientHello(DataStruct):
+	def __init__(self, entity):
+		ciphersuites = DataVector(Uint16, (2**16-2), 2)
+		compressionmethods = DataVector(Uint8, (2**8-1), 1)
+		super().__init__((ProtocolVersion(), RandomStruct.generate(), SessionID(), ciphersuites, compressionmethods),
+						('client_version', 'random', 'session_id', 'cipher_suites', 'compression_methods'))
+		# TODO: cas avec les extensions
+		# extensions: cf RFC p. 44
+
+
+class ServerHello(Uint8):
+	def __init__(self):
+		super().__init__(0)
+
+
+class Certificate(Uint8):
+	def __init__(self):
+		super().__init__(0)
+
+
+class ServerKeyExchange(Uint8):
+	def __init__(self):
+		super().__init__(0)
+
+
+class CertificateRequest(Uint8):
+	def __init__(self):
+		super().__init__(0)
+
+
+class ServerHelloDone(Uint8):
+	def __init__(self):
+		super().__init__(0)
+
+
+class CertificateVerify(Uint8):
+	def __init__(self):
+		super().__init__(0)
+
+
+class ClientKeyExchange(Uint8):
+	def __init__(self):
+		super().__init__(0)
+
+
+class Finished(Uint8):
+	def __init__(self):
+		super().__init__(0)
+
+
+class Handshake(DataStruct):
+	def __init__(self, entity, hstype, length):
+		# Placeholder: TODO
+		if hstype == HandshakeType.hello_request:
+			body = HelloRequest()
+		elif hstype == HandshakeType.client_hello:
+			body = ClientHello()
+		elif hstype == HandshakeType.server_hello:
+			body = ServerHello()
+		elif hstype == HandshakeType.certificate:
+			body = Certificate()
+		elif hstype == HandshakeType.server_key_exchange:
+			body = ServerKeyExchange()
+		elif hstype == HandshakeType.certificate_request:
+			body = CertificateRequest()
+		elif hstype == HandshakeType.server_hello_done:
+			body = ServerHelloDone()
+		elif hstype == HandshakeType.certificate_verify:
+			body = CertificateVerify()
+		elif hstype == HandshakeType.client_key_exchange:
+			body = ClientKeyExchange()
+		elif hstype == HandshakeType.finished:
+			body = Finished()
+		else:
+			raise Exception("Invalid handshake type")
+		super().__init__((HandshakeType(hstype), Uint24(length), body),
+						('msg_type', 'length', 'body'))
 
 
 class Client:
