@@ -9,24 +9,27 @@ from random import SystemRandom as Sr
 import elliptic_curves as ec
 
 
-class ECDHInstance:
+class ECEntity:
 	def __init__(self, curve, secret=None):
 		assert(type(curve) == ec.EllipticCurveJ)
-		if secret:
-			assert(type(secret) == int)
-		else:
+		if not secret:
 			secret = Sr().randint(1, (curve.params.order - 1))
 		self.secret = secret
-		self.pubkey = curve.g * secret
+		self.pubkey = (curve.g * secret).affine()
+		self.curve = curve
 
 	def sharedsecret(self, otherpubkey):
-		return (otherpubkey * self.secret).affine()[0]
+		return (ec.PointJ(self.curve, otherpubkey) * self.secret).affine()[0]
 
 
-def ecdhtests(curveid=0):
-	curve = ec.nistCurves[curveid]
-	partya = ECDHInstance(curve)
-	partyb = ECDHInstance(curve)
+def ecdhtests(curve=ec.nistCurves[0]):
+	partya = ECEntity(curve)
+	partyb = ECEntity(curve)
 	sharedsecret1 = partya.sharedsecret(partyb.pubkey)
 	sharedsecret2 = partyb.sharedsecret(partya.pubkey)
 	return sharedsecret1 == sharedsecret2
+
+
+def ecdsatests(curve=ec.nistCurves[0]):
+	partya = ECEntity(curve)
+	partyb = ECEntity(curve)
