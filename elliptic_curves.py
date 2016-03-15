@@ -10,6 +10,8 @@ from random import SystemRandom as SR
 import gmpy2
 from gmpy2 import mpz
 
+from tests import singletest
+
 
 def random_bits(n):
 	return SR().getrandbits(n)
@@ -282,16 +284,6 @@ nistParams = {'P-192': ParamSet(mpz('6277101735386680763835789423207666416083908
 nistCurves = []
 for i in nistParams:
 	nistCurves.append(EllipticCurveJ(nistParams[i]))
-
-
-def singletest(test, **kwargs):
-	for key, value in kwargs.items():
-		locals()[str(key)] = value
-	testresult = eval(test)
-	if not testresult:
-		raise Exception('Test failed: ' + str(test))
-	print(test + ' : OK')
-	return testresult
 
 
 def curvetests():

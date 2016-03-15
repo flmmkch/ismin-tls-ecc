@@ -8,16 +8,18 @@ from random import SystemRandom as Sr
 
 import elliptic_curves as ec
 
-from Crypto.Hash import SHA256
+from Crypto.Hash import SHA256, SHA
 import gmpy2
 from gmpy2 import mpz
+
+from tests import singletest
 
 
 class ECEntity:
 	def __init__(self, curve, secret=None):
 		assert(type(curve) == ec.EllipticCurveJ)
 		if not secret:
-			secret = Sr().randint(1, (curve.params.order - 1))
+			secret = mpz(Sr().randint(1, (curve.params.order - 1)))
 		self.secret = secret
 		self.pubkey = (curve.g * secret).affine()
 		self.curve = curve
@@ -26,45 +28,38 @@ class ECEntity:
 		return (ec.PointJ(self.curve, otherpubkey) * self.secret).affine()[0]
 
 
-def sign(entity: ECEntity, message, hashalgo=SHA256):
+def sign(entity: ECEntity, message, hashalgo=SHA):
 	if isinstance(message, str):
 		message = message.encode('UTF-8')
-	e = hashalgo.new(message).digest()
+	h = hashalgo.new(message).digest()
 	n = entity.curve.params.order
-	z = int.from_bytes(e[:n.bit_length()], byteorder='big')  # bits de gauche de e
+	e = mpz(int.from_bytes(h[:n.bit_length()], byteorder='big'))  # bits de gauche de e
 	while True:
 		k = Sr().randint(1, n-1)
 		p1 = entity.curve.g * k
-		r = int(p1.affine()[0])
+		r = p1.affine()[0] % n
 		if r == 0:
 			continue
-		s = gmpy2.divm(z + r * entity.secret, k, n)
+		s = gmpy2.divm(e + entity.secret * r, k, n)
 		if s == 0:
 			continue
 		return r, s
 
 
-def verifysignature(curve, pubkey, signature, message, hashalgo=SHA256):
+# Renvoie True si la signature est valide, False sinon
+def verifysignature(curve, pubkey, signature, message, hashalgo=SHA):
 	publickeypoint = ec.PointJ(curve, pubkey)
-	# D'abord verifier que le point est valide
-	# Ensuite
-	for i in [0, 1]:
-		if signature[i] < 0 or signature[i] >= curve.params.order:
-			return False
+	n = curve.params.order
 	if isinstance(message, str):
 		message = message.encode('UTF-8')
-	e = hashalgo.new(message).digest()
-	n = curve.params.order
-	z = int.from_bytes(e[:n.bit_length()], byteorder='big')  # bits de gauche de e
-	r, s = pubkey
-	w = gmpy2.divm(1, int(s), n)
-	u1 = (z * w) % n
-	u2 = (r * w) % n
-	resultpoint = curve.g * u1
-	resultpoint += publickeypoint * u2
-	x1 = resultpoint.affine()[0]
-	result = (x1 - r) % n
-	return result == 0, result  # on doit avoir r ≡ x1 (mod n)
+	h = hashalgo.new(message).digest()
+	e = mpz(int.from_bytes(h[:n.bit_length()], byteorder='big'))  # bits de gauche de e
+	r, s = signature
+	u1 = gmpy2.divm(e, s, n)
+	u2 = gmpy2.divm(r, s, n)
+	resultpoint = curve.g * u1 + publickeypoint * u2
+	v = resultpoint.affine()[0] % n
+	return v == r  # on doit avoir r ≡ x1 (mod n)
 
 
 def ecdhtests(curve=ec.nistCurves[0]):
@@ -75,7 +70,18 @@ def ecdhtests(curve=ec.nistCurves[0]):
 	return sharedsecret1 == sharedsecret2
 
 
-def ecdsatests(message='Bonjour ceci est un test ok bye', curve=ec.nistCurves[0]):
+def ecdsatests(message='Bonjour, ceci est un test', curve=ec.nistCurves[0]):
 	partya = ECEntity(curve)
-	test = sign(partya, message)
-	return verifysignature(curve, partya.pubkey, test, message)
+	sigtest = sign(partya, message)
+	# on vérifie qu'une signature valide est bel et bien validée
+	singletest('verifysignature(curve, pka, sigtest, message)', curve=curve, pka=partya.pubkey, sigtest=sigtest,
+				message=message, verifysignature=verifysignature)
+	partyb = ECEntity(curve)
+	# on s'assure que ce sont des clés secrètes différentes (sinon les tests ne fonctionneront pas)
+	while partyb.secret == partya.secret:
+		partyb = ECEntity(curve)
+	# on vérifie qu'une signature invalide (par rapport à une certaine clé publique) est bel et bien invalidée
+	singletest('not verifysignature(curve, pkb, sigtest, message)', curve=curve, pkb=partyb.pubkey, sigtest=sigtest,
+				message=message, verifysignature=verifysignature)
+	return True
+
