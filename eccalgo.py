@@ -8,11 +8,15 @@ from random import SystemRandom as Sr
 
 import elliptic_curves as ec
 
-from Crypto.Hash import SHA256, SHA
+from Crypto.Hash import SHA
 import gmpy2
 from gmpy2 import mpz
 
 from tests import singletest
+
+
+def curvebits(curve: ec.EllipticCurveJ):
+	return curve.params.order.bit_length()
 
 
 class ECEntity:

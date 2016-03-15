@@ -8,16 +8,20 @@
 import os
 import time
 import math
-
+from tests import singletest
 
 class DataElem:
 	defaultvalue = 0
 	order = 'big'
 
-	def __init__(self, length, value=defaultvalue):
-		# length in bytes
-		self.length = length
-		self.value = value
+	def __init__(self, arg, value=defaultvalue):
+		if isinstance(arg, int):
+			# arg is the length in bytes
+			self.length = arg
+			self.value = value
+		elif isinstance(arg, bytes):
+			self.length = len(arg)
+			self.value = arg
 
 	def read(self, newvalue):
 		if isinstance(newvalue, DataElem):
@@ -34,7 +38,11 @@ class DataElem:
 				return self.value + b'\x00' * (self.length - len(self.value))  # padding (en big endian)
 			# sinon, on retourne le bon nombre
 			return self.value[:self.length]
-		return self.value.to_bytes(self.length, byteorder=DataElem.order)
+		elif isinstance(self.value, int):
+			return self.value.to_bytes(self.length, byteorder=DataElem.order)
+
+	def __bytes__(self):
+		return self.to_bytes()
 
 	def __eq__(self, other):
 		s = self.to_bytes()
@@ -45,32 +53,39 @@ class DataElem:
 		elif isinstance(other, int):
 			return s == int.from_bytes(s, byteorder=DataElem.order)
 
+	def size(self):
+		return self.length
+
 
 class DataArray(DataElem):
 	def __init__(self, size, elemlength):
-		self.size = size
-		self.value = (DataElem(elemlength),) * self.size
+		self.arraysize = size
+		self.value = (DataElem(elemlength),) * self.arraysize
 
 	def read(self, newvalue):
 		i = 0
-		for elem in range(self.size):
+		for elem in range(self.arraysize):
 			bytesread = self.value[elem].read(newvalue[i:])
 			i += bytesread
 		return i
 
 	def to_bytes(self):
 		s = b''
-		for elem in range(self.size):
+		for elem in range(self.arraysize):
 			s += self.value[elem].to_bytes()
+		return s
+
+	def size(self):
+		s = 0
+		for elem in self.value:
+			s += elem.size()
 		return s
 
 
 class DataStruct(DataElem):
 	def __init__(self, elements, elemnames=()):
-		self.value = tuple(elements)
-		self.elemnames = tuple(elemnames)
-		for i in range(len(self.elemnames)):
-			setattr(self, elemnames[i], self.value[i])
+		object.__setattr__(self, 'elemnames', tuple(elemnames))
+		object.__setattr__(self, 'value', tuple(elements))
 
 	def read(self, newvalue):
 		i = 0
@@ -83,6 +98,26 @@ class DataStruct(DataElem):
 		for elem in self.value:
 			s += elem.to_bytes()
 		return s
+
+	def size(self):
+		s = 0
+		for elem in self.value:
+			s += elem.size()
+		return s
+
+	def __getattr__(self, item):
+		if item in self.elemnames:
+			index = self.elemnames.index(item)
+			return self.value[index]
+		else:
+			return object.__getattr__(self, item)
+
+	def __setattr__(self, key, value):
+		if key in self.elemnames:
+			index = self.elemnames.index(key)
+			self.value = self.value[:index] + (value, ) + self.value[index+1:]
+		else:
+			object.__setattr__(self, key, value)
 
 
 def nbytes(e):
@@ -98,17 +133,17 @@ class DataVector(DataElem):
 		self.floor = floor
 		self.dtype = dtype
 		self.sizerange = ceiling - floor
-		self.size = 0
+		self.vectsize = 0
 		self.value = []
 
 	def read(self, newvalue):
 		i = 0
 		# first read the size
 		i += nbytes(self.sizerange)
-		self.size = self.floor + int.from_bytes(newvalue[:i], byteorder=DataElem.order)
+		self.vectsize = self.floor + int.from_bytes(newvalue[:i], byteorder=DataElem.order)
 		# then read the elements
 		self.value = []
-		for elem in range(self.size):
+		for elem in range(self.vectsize):
 			elem = self.dtype()
 			i += elem.read(newvalue[i:])
 			self.value.append(elem)
@@ -117,10 +152,16 @@ class DataVector(DataElem):
 	def to_bytes(self):
 		s = b''
 		# first write the size
-		s += (self.size - self.floor).to_bytes(nbytes(self.sizerange), byteorder=DataElem.order)
+		s += (self.vectsize - self.floor).to_bytes(nbytes(self.sizerange), byteorder=DataElem.order)
 		# then write the elements
-		for elem in range(self.size):
+		for elem in range(self.vectsize):
 			s += self.value[elem].to_bytes()
+		return s
+
+	def size(self):
+		s = nbytes(self.sizerange)
+		for elem in self.value:
+			s += elem.size()
 		return s
 
 
@@ -129,7 +170,9 @@ class Uint(DataElem):
 		super().__init__(size, value)
 
 	def __int__(self):
-		return int.from_bytes(self.value, byteorder=DataElem.order, signed=False)
+		if isinstance(self.value, int):
+			return self.value
+		return int.from_bytes(bytes(self.value), byteorder=DataElem.order, signed=False)
 
 
 class Uint8(Uint):
@@ -158,8 +201,13 @@ class Uint64(Uint):
 
 
 class Opaque(DataArray):
-	def __init__(self, size=1):
-		super().__init__(1, size)
+	def __init__(self, arg=1):
+		if isinstance(arg, int):  # arg represents the size of the byte array to initiate
+			super().__init__(1, arg)
+		elif isinstance(arg, bytes):  # arg is the initial byte array
+			size = len(arg)
+			super().__init__(1, size)
+			self.read(arg)
 
 
 class ConnectionEnd(Uint8):
@@ -276,6 +324,18 @@ class ProtocolVersion(DataStruct):
 		self.minor.value = minor
 
 
+# TLS extension description
+class ExtensionType(Uint16):
+	signature_algorithms = 13
+
+
+class Extension(DataStruct):
+	# TODO: initialisation avec les données de l'extension
+	def __init__(self):
+		extension_data = DataVector(Uint8, 2**16-1)
+		super().__init__((ExtensionType(), extension_data), ('extension_type', 'extension_data'))
+
+
 class RecordContentType(DataElem):
 	change_cipher_spec = 20
 	alert = 21
@@ -289,45 +349,66 @@ class RecordContentType(DataElem):
 
 
 class TLSPlainText(DataStruct):
-	def __init__(self, length):
-		super().__init__((RecordContentType(), ProtocolVersion(), Uint16(length), Opaque(length)),
+	def __init__(self, arg):
+		if isinstance(arg, bytes):
+			length = len(arg)
+			fragment = Opaque(length)
+			fragment.read(arg)
+		elif isinstance(arg, DataElem):
+			length = DataElem.size()
+			fragment = arg
+		super().__init__((RecordContentType(), ProtocolVersion(), Uint16(length), fragment),
 						('type', 'version', 'length', 'fragment'))
 
 
 class TLSCompressed(DataStruct):
-	def __init__(self, length):
-		super().__init__((RecordContentType(), ProtocolVersion(), Uint16(length), Opaque(length)),
+	def __init__(self, arg):
+		if isinstance(arg, bytes):
+			length = len(arg)
+			fragment = Opaque(length)
+			fragment.read(arg)
+		elif isinstance(arg, DataElem):
+			length = DataElem.size()
+			fragment = arg
+		super().__init__((RecordContentType(), ProtocolVersion(), Uint16(length), fragment),
 						('type', 'version', 'length', 'fragment'))
 
 
 # Classes de cipher: a corriger au niveau des structures de données cryptographiques...
 class GenericStreamCipher(DataStruct):
-	def __init__(self, entity: Entity, length):
-		super().__init__((Opaque(length), Opaque(entity.state.mac_length)),
+	def __init__(self, content: DataElem, entity: Entity):
+		super().__init__((content, Opaque(entity.state.mac_length)),
 						('content', 'MAC'))
 
 
 class GenericBlockCipher(DataStruct):
-	def __init__(self, entity: Entity, length):
-		super().__init__((Opaque(entity.state.record_iv_length), Opaque(length), DataArray(entity.state.mac_length, 1),
+	def __init__(self, content: DataElem, entity: Entity):
+		super().__init__((Opaque(entity.state.record_iv_length), content, DataArray(entity.state.mac_length, 1),
 																				Uint8()),
 						('IV', 'content', 'MAC', 'padding', 'padding_length'))
 
 
 class GenericAEADCipher(DataStruct):
-	def __init__(self, entity: Entity, length):
-		super().__init__((Opaque(entity.state.record_iv_length), Opaque(length)),
+	def __init__(self, content: DataElem, entity: Entity):
+		super().__init__((Opaque(entity.state.record_iv_length), content),
 						('nonce_explicit', 'content'))
 
 
 class TLSCipherText(DataStruct):
-	def __init__(self, entity: Entity, length):
+	def __init__(self, arg, entity: Entity):
+		if isinstance(arg, bytes):
+			length = len(arg)
+			fragment = Opaque(length)
+			fragment.read(arg)
+		elif isinstance(arg, DataElem):
+			length = arg.size()
+			fragment = arg
 		if entity.state.cipherType == CipherType.stream:
-			fragment = GenericStreamCipher(entity, length)
+			fragment = GenericStreamCipher(fragment, entity)
 		elif entity.state.cipherType == CipherType.block:
-			fragment = GenericBlockCipher(entity, length)
+			fragment = GenericBlockCipher(fragment, entity)
 		elif entity.state.cipherType == CipherType.aead:
-			fragment = GenericAEADCipher(entity, length)
+			fragment = GenericAEADCipher(fragment, entity)
 		else:
 			raise Exception("Invalid cipher type")
 		super().__init__((RecordContentType(), ProtocolVersion(), Uint16(length), fragment),
@@ -416,6 +497,59 @@ class HandshakeType(Uint8):
 		super().__init__(value)
 
 
+class CipherSuite(DataElem):
+	def __init__(self, val=b'\x00\x00'):
+		super().__init__(2, val)
+
+# default cipher suites
+# See RFC 5246 A. 5. (p. 75)
+
+# TLS_NULL_WITH_NULL is the initial state of a TLS connection during the first handshake on that channel,
+# but it must not be negotiated, as it provides no protection
+TLS_NULL_WITH_NULL = CipherSuite(b'\x00\x00')
+
+# The following defintions require that the server provide an RSA certificate that can be used for key excahnge
+TLS_RSA_WITH_NULL_SHA = CipherSuite(b'\x00\x02')
+TLS_RSA_WITH_NULL_SHA256 = CipherSuite(b'\x00\x3B')
+TLS_NULL_WITH_RC4_128_MD5 = CipherSuite(b'\x00\x04')
+TLS_NULL_WITH_RC4_128_SHA = CipherSuite(b'\x00\x05')
+TLS_NULL_WITH_3DES_EDE_CBC_SHA = CipherSuite(b'\x00\x0A')
+TLS_NULL_WITH_AES_128_CBC_SHA = CipherSuite(b'\x00\x2F')
+TLS_NULL_WITH_AES_256_CBC_SHA = CipherSuite(b'\x00\x35')
+TLS_NULL_WITH_AES_128_CBC_SHA256 = CipherSuite(b'\x00\x3C')
+TLS_NULL_WITH_AES_256_CBC_SHA256 = CipherSuite(b'\x00\x3D')
+
+# The following definitions are used for server-authenticated (and optionally client-authenticated) Diffie-Hellman.
+TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA = CipherSuite(b'\x00\x0D')
+TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA = CipherSuite(b'\x00\x10')
+TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA = CipherSuite(b'\x00\x13')
+TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA = CipherSuite(b'\x00\x16')
+TLS_DH_DSS_WITH_AES_128_CBC_SHA = CipherSuite(b'\x00\x30')
+TLS_DH_RSA_WITH_AES_128_CBC_SHA = CipherSuite(b'\x00\x31')
+TLS_DHE_DSS_WITH_AES_128_CBC_SHA = CipherSuite(b'\x00\x32')
+TLS_DHE_RSA_WITH_AES_128_CBC_SHA = CipherSuite(b'\x00\x33')
+TLS_DH_DSS_WITH_AES_256_CBC_SHA = CipherSuite(b'\x00\x36')
+TLS_DH_RSA_WITH_AES_256_CBC_SHA = CipherSuite(b'\x00\x37')
+TLS_DHE_DSS_WITH_AES_256_CBC_SHA = CipherSuite(b'\x00\x38')
+TLS_DHE_RSA_WITH_AES_256_CBC_SHA = CipherSuite(b'\x00\x39')
+TLS_DH_DSS_WITH_AES_128_CBC_SHA256 = CipherSuite(b'\x00\x3E')
+TLS_DH_RSA_WITH_AES_128_CBC_SHA256 = CipherSuite(b'\x00\x3F')
+TLS_DHE_DSS_WITH_AES_128_CBC_SHA256 = CipherSuite(b'\x00\x40')
+TLS_DHE_RSA_WITH_AES_128_CBC_SHA256 = CipherSuite(b'\x00\x67')
+TLS_DH_DSS_WITH_AES_256_CBC_SHA256 = CipherSuite(b'\x00\x68')
+TLS_DH_RSA_WITH_AES_256_CBC_SHA256 = CipherSuite(b'\x00\x69')
+TLS_DHE_DSS_WITH_AES_256_CBC_SHA256 = CipherSuite(b'\x00\x6A')
+TLS_DHE_RSA_WITH_AES_256_CBC_SHA256 = CipherSuite(b'\x00\x6B')
+
+# The following definitions are used for completely anonymous Diffie-Hellman communications in which neither party is
+# authenticated
+TLS_DH_anon_WITH_RC4_128_MD5 = CipherSuite(b'\x00\x18')
+TLS_DH_anon_WITH_3DES_EDE_CBC_SHA = CipherSuite(b'\x00\x1B')
+TLS_DH_anon_WITH_AES_128_CBC_SHA = CipherSuite(b'\x00\x34')
+TLS_DH_anon_WITH_AES_256_CBC_SHA = CipherSuite(b'\x00\x3A')
+TLS_DH_anon_WITH_AES_128_CBC_SHA256 = CipherSuite(b'\x00\x6C')
+TLS_DH_anon_WITH_AES_256_CBC_SHA256 = CipherSuite(b'\x00\x6D')
+
 class HelloRequest(DataStruct):
 	def __init__(self):
 		super().__init__(())  # structure vide (cf RFC5246, p. 39)
@@ -423,7 +557,7 @@ class HelloRequest(DataStruct):
 
 class ClientHello(DataStruct):
 	def __init__(self, entity):
-		ciphersuites = DataVector(Uint16, (2**16-2), 2)
+		ciphersuites = DataVector(CipherSuite, (2**16-2), 2)
 		compressionmethods = DataVector(Uint8, (2**8-1), 1)
 		super().__init__((ProtocolVersion(), RandomStruct.generate(), SessionID(), ciphersuites, compressionmethods),
 						('client_version', 'random', 'session_id', 'cipher_suites', 'compression_methods'))
@@ -433,7 +567,10 @@ class ClientHello(DataStruct):
 
 class ServerHello(Uint8):
 	def __init__(self):
-		super().__init__(0)
+		ciphersuites = DataVector(CipherSuite, (2**16-2), 2)
+		compressionmethods = DataVector(Uint8, (2**8-1), 1)
+		super().__init__((ProtocolVersion(), RandomStruct.generate(), SessionID(), ciphersuites, compressionmethods),
+						('server_version', 'random', 'session_id', 'cipher_suites', 'compression_methods'))
 
 
 class Certificate(Uint8):
@@ -505,3 +642,13 @@ class Client:
 		self.hostname = hostname
 		self.portnumber = portnumber
 		self.state = ConnectionState(ConnectionEnd.client)
+
+
+def datatests():
+	test = DataStruct((DataElem(1, 3), Opaque(b'\x08BASEDGOD'), Uint32(100000)), ('kon', 'ban', 'wa'))
+	singletest('t.size() == 14 and isinstance(t.value, tuple) and len(t.value) == 3', t=test)
+	singletest('bytes(t) == right_value', t=test, right_value=b'\x03\x08BASEDGOD\x00\x01\x86\xa0')
+	test.ban = Uint8(5)
+	singletest('bytes(t) == right_value', t=test, right_value=b'\x03\x05\x00\x01\x86\xa0')
+	singletest('int(t.wa.value) == right_value', t=test, right_value=100000)
+	return True
