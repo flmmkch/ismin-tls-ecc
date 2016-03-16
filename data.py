@@ -125,15 +125,14 @@ class DataVector(DataElem):
 		self.ceiling = ceiling
 		self.floor = floor
 		self.dtype = dtype
-		self.sizerange = ceiling - floor
-		self.vectsize = 0
-		self.value = []
+		self.vectsize = floor
+		self.value = [self.dtype()] * self.vectsize
 
 	def read(self, newvalue):
 		i = 0
 		# first read the size
-		i += nbytes(self.sizerange)
-		self.vectsize = self.floor + int.from_bytes(newvalue[:i], byteorder=DataElem.order)
+		i += nbytes(self.ceiling)
+		self.vectsize = int.from_bytes(newvalue[:i], byteorder=DataElem.order)
 		# then read the elements
 		self.value = []
 		for elem in range(self.vectsize):
@@ -145,14 +144,14 @@ class DataVector(DataElem):
 	def to_bytes(self):
 		s = b''
 		# first write the size
-		s += (self.vectsize - self.floor).to_bytes(nbytes(self.sizerange), byteorder=DataElem.order)
+		s += self.vectsize.to_bytes(nbytes(self.ceiling), byteorder=DataElem.order)
 		# then write the elements
 		for elem in range(self.vectsize):
 			s += self.value[elem].to_bytes()
 		return s
 
 	def size(self):
-		s = nbytes(self.sizerange)
+		s = nbytes(self.ceiling)
 		for elem in self.value:
 			s += elem.size()
 		return s

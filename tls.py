@@ -358,7 +358,7 @@ class HelloRequest(DataStruct):
 
 
 class ClientHello(DataStruct):
-	def __init__(self, entity):
+	def __init__(self):
 		ciphersuites = DataVector(CipherSuite, (2**16-2), 2)
 		compressionmethods = DataVector(Uint8, (2**8-1), 1)
 		super().__init__((ProtocolVersion(), RandomStruct.generate(), SessionID(), ciphersuites, compressionmethods),
