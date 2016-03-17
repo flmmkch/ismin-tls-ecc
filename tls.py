@@ -8,7 +8,7 @@
 import os
 import time
 from tests import singletest
-from data import DataElem, DataStruct, DataArray, DataVector, Uint8, Uint16, Uint24, Uint32, Opaque
+from data import DataElem, DataStruct, DataArray, DataVector, DataElemVector, Uint8, Uint16, Uint24, Uint32, Opaque
 
 
 class ConnectionEnd(Uint8):
@@ -351,6 +351,15 @@ TLS_DH_anon_WITH_AES_256_CBC_SHA = CipherSuite(b'\x00\x3A')
 TLS_DH_anon_WITH_AES_128_CBC_SHA256 = CipherSuite(b'\x00\x6C')
 TLS_DH_anon_WITH_AES_256_CBC_SHA256 = CipherSuite(b'\x00\x6D')
 
+TLS_ECDHE_ECDSA_WITH_128_CBC_SHA = CipherSuite(b'\xC0\x09')
+TLS_ECDHE_ECDSA_WITH_256_CBC_SHA = CipherSuite(b'\xC0\x0A')
+TLS_ECDHE_ECDSA_WITH_128_CBC_SHA256 = CipherSuite(b'\xC0\x23')
+TLS_ECDHE_ECDSA_WITH_256_CBC_SHA384 = CipherSuite(b'\xC0\x24')
+TLS_ECDH_ECDSA_WITH_128_CBC_SHA = CipherSuite(b'\xC0\x04')
+TLS_ECDH_ECDSA_WITH_256_CBC_SHA = CipherSuite(b'\xC0\x05')
+TLS_ECDH_ECDSA_WITH_128_CBC_SHA256 = CipherSuite(b'\xC0\x25')
+TLS_ECDH_ECDSA_WITH_256_CBC_SHA384 = CipherSuite(b'\xC0\x26')
+
 
 class HelloRequest(DataStruct):
 	def __init__(self):
@@ -367,7 +376,7 @@ class ClientHello(DataStruct):
 		# extensions: cf RFC p. 44
 
 
-class ServerHello(Uint8):
+class ServerHello(DataStruct):
 	def __init__(self):
 		ciphersuites = DataVector(CipherSuite, (2**16-2), 2)
 		compressionmethods = DataVector(Uint8, (2**8-1), 1)
@@ -375,34 +384,40 @@ class ServerHello(Uint8):
 						('server_version', 'random', 'session_id', 'cipher_suites', 'compression_methods'))
 
 
-class Certificate(Uint8):
+class ASN1Cert(DataElemVector):
 	def __init__(self):
-		super().__init__(0)
+		super().__init__(1, 2**24-1, 1)
 
 
-class ServerKeyExchange(Uint8):
+class CertificateStruct(DataStruct):
 	def __init__(self):
-		super().__init__(0)
+		certificate_list = DataVector(ASN1Cert, 2**24-1)
+		super().__init__((certificate_list,), ('certificate_list',))
 
 
-class CertificateRequest(Uint8):
+class ServerKeyExchange(DataStruct):
 	def __init__(self):
-		super().__init__(0)
+		super().__init__(())
 
 
-class ServerHelloDone(Uint8):
+class CertificateRequest(DataStruct):
 	def __init__(self):
-		super().__init__(0)
+		super().__init__(())
 
 
-class CertificateVerify(Uint8):
+class ServerHelloDone(DataStruct):
 	def __init__(self):
-		super().__init__(0)
+		super().__init__(())
+
+
+class CertificateVerify(DataStruct):
+	def __init__(self):
+		super().__init__(())
 
 
 class ClientKeyExchange(Uint8):
 	def __init__(self):
-		super().__init__(0)
+		super().__init__(())
 
 
 class Finished(Uint8):
@@ -420,7 +435,7 @@ class Handshake(DataStruct):
 		elif hstype == HandshakeType.server_hello:
 			body = ServerHello()
 		elif hstype == HandshakeType.certificate:
-			body = Certificate()
+			body = CertificateStruct()
 		elif hstype == HandshakeType.server_key_exchange:
 			body = ServerKeyExchange()
 		elif hstype == HandshakeType.certificate_request:
@@ -446,11 +461,15 @@ class Client:
 		self.state = ConnectionState(ConnectionEnd.client)
 
 
-def datatests():
-	test = DataStruct((DataElem(1, 3), Opaque(b'\x08BASEDGOD'), Uint32(100000)), ('kon', 'ban', 'wa'))
-	singletest('t.size() == 14 and isinstance(t.value, tuple) and len(t.value) == 3', t=test)
-	singletest('bytes(t) == right_value', t=test, right_value=b'\x03\x08BASEDGOD\x00\x01\x86\xa0')
-	test.ban = Uint8(5)
-	singletest('bytes(t) == right_value', t=test, right_value=b'\x03\x05\x00\x01\x86\xa0')
-	singletest('int(t.wa.value) == right_value', t=test, right_value=100000)
-	return True
+CIPHER_SUITES = [
+	TLS_ECDHE_ECDSA_WITH_128_CBC_SHA,
+	TLS_ECDHE_ECDSA_WITH_256_CBC_SHA,
+	TLS_ECDHE_ECDSA_WITH_128_CBC_SHA256,
+	TLS_ECDHE_ECDSA_WITH_256_CBC_SHA384,
+	TLS_ECDH_ECDSA_WITH_128_CBC_SHA,
+	TLS_ECDH_ECDSA_WITH_256_CBC_SHA,
+	TLS_ECDH_ECDSA_WITH_128_CBC_SHA256,
+	TLS_ECDH_ECDSA_WITH_256_CBC_SHA384
+	]
+
+

@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import math
+from tests import singletest
 
 
 class DataElem:
@@ -53,26 +54,43 @@ class DataElem:
 class DataArray(DataElem):
 	def __init__(self, size, elemlength):
 		self.arraysize = size
-		self.value = (DataElem(elemlength),) * self.arraysize
+		self.elemlength = elemlength
+		self.value = b'\x00' * elemlength * size
 
 	def read(self, newvalue):
 		i = 0
-		for elem in range(self.arraysize):
-			bytesread = self.value[elem].read(newvalue[i:])
-			i += bytesread
+		size = self.elemlength * self.arraysize
+		self.value = newvalue[:size] + self.value[len(newvalue):]
+		i += len(newvalue[:size])
 		return i
 
 	def to_bytes(self):
-		s = b''
-		for elem in range(self.arraysize):
-			s += self.value[elem].to_bytes()
-		return s
+		return self.value
 
 	def size(self):
-		s = 0
-		for elem in self.value:
-			s += elem.size()
-		return s
+		return self.elemlength * self.arraysize
+
+	def __getitem__(self, item):
+		if isinstance(item, int) and 0 <= item < self.arraysize:
+			s = DataElem(self.value[self.elemlength * item: self.elemlength * (item + 1)])
+			return s
+
+	def valuewithoutitem(self, key):
+		valuebefore = self.value[:self.elemlength * key]
+		valueafter = self.value[self.elemlength * (key+1):]
+		return valuebefore, valueafter
+
+	def __setitem__(self, key, value):
+		if isinstance(key, int) and 0 <= key < self.arraysize:
+			if (isinstance(value, DataElem) and value.size() == self.elemlength) or isinstance(value, bytes):
+				valuebefore, valueafter = self.valuewithoutitem(key)
+				self.value = valuebefore + bytes(value) + valueafter
+			elif isinstance(value, int):
+				valuebefore, valueafter = self.valuewithoutitem(key)
+				if value.bit_length() > self.elemlength:
+					return  # Cas invalide
+				b = value.to_bytes(self.elemlength, byteorder=DataElem.order)
+				self.value = valuebefore + b + valueafter
 
 
 class DataStruct(DataElem):
@@ -112,6 +130,9 @@ class DataStruct(DataElem):
 		else:
 			object.__setattr__(self, key, value)
 
+	def __dir__(self):
+		return object.__dir__(self) + list(self.elemnames)
+
 
 def nbytes(e):
 	if e == 0:
@@ -121,10 +142,12 @@ def nbytes(e):
 
 class DataVector(DataElem):
 	def __init__(self, dtype, ceiling, floor=0):
-		assert(issubclass(dtype, DataElem))
 		self.ceiling = ceiling
 		self.floor = floor
-		self.dtype = dtype
+		if issubclass(dtype, DataElem):
+			self.dtype = dtype
+		else:
+			self.dtype = DataElem(int(dtype))  # on considère dtype comme la taille de l'élément
 		self.vectsize = floor
 		self.value = [self.dtype()] * self.vectsize
 
@@ -155,6 +178,93 @@ class DataVector(DataElem):
 		for elem in self.value:
 			s += elem.size()
 		return s
+
+	def __getitem__(self, item):
+		if isinstance(item, int) and 0 <= item < self.vectsize:
+			s = DataElem(self.value[item])
+			return s
+
+	def valuewithoutitem(self, key):
+		valuebefore = self.value[:key]
+		valueafter = self.value[(key+1):]
+		return valuebefore, valueafter
+
+	def __setitem__(self, key, value):
+		if isinstance(key, int) and 0 <= key < self.arraysize:
+			if (isinstance(value, DataElem) and value.size() == self.elemlength) or isinstance(value, bytes):
+				valuebefore, valueafter = self.valuewithoutitem(key)
+				newitem = self.dtype()
+				newitem.read(value)
+				self.value = valuebefore + newitem + valueafter
+			elif isinstance(value, int):
+				valuebefore, valueafter = self.valuewithoutitem(key)
+				if value.bit_length() > self.elemlength:
+					return  # Cas invalide
+				b = value.to_bytes(self.elemlength, byteorder=DataElem.order)
+				newitem = self.dtype()
+				newitem.read(b)
+				self.value = valuebefore + newitem + valueafter
+
+
+class DataElemVector(DataElem):
+	def __init__(self, elemsize, ceiling, floor=0, value=None):
+		self.elemsize = elemsize
+		self.ceiling = ceiling
+		self.floor = floor
+		if value:
+			self.value = bytes(value)
+			self.vectsize = len(value) // self.elemsize
+			if (self.elemsize * self.vectsize) < len(self.value):
+				self.vectsize += 1
+				self.value += b'\x00' * ((self.elemsize * self.vectsize) - len(value))
+		else:
+			self.vectsize = floor
+			self.value = b'\x00' * self.elemsize * self.vectsize
+
+	def read(self, newvalue):
+		i = 0
+		# first read the size
+		i += nbytes(self.ceiling)
+		self.vectsize = int.from_bytes(newvalue[:i], byteorder=DataElem.order)
+		# then read the elements
+		self.value = bytes(newvalue)[:(self.vectsize * self.elemsize)]
+		if len(self.value) < self.vectsize * self.elemsize:
+			self.value += b'\x00' * (self.vectsize * self.elemsize - len(self.value))
+		return i
+
+	def to_bytes(self):
+		s = b''
+		# first write the size
+		s += self.vectsize.to_bytes(nbytes(self.ceiling), byteorder=DataElem.order)
+		# then write the elements
+		s += self.value
+		return s
+
+	def size(self):
+		return nbytes(self.ceiling) + len(self.value)
+
+	def __getitem__(self, item):
+		if isinstance(item, int) and 0 <= item < self.vectsize:
+			s = DataElem(self.value[self.elemsize * item:self.elemsize * (item + 1)])
+			return s
+
+	def valuewithoutitem(self, key):
+		valuebefore = self.value[:self.elemsize * key]
+		valueafter = self.value[self.elemsize * (key+1):]
+		return valuebefore, valueafter
+
+	def __setitem__(self, key, value):
+		if isinstance(key, int) and 0 <= key < self.vectsize:
+			if (isinstance(value, DataElem) and value.size() == self.elemsize) or isinstance(value, bytes):
+				valuebefore, valueafter = self.valuewithoutitem(key)
+				newitem = bytes(value)[:self.elemsize]
+				self.value = valuebefore + newitem + valueafter
+			elif isinstance(value, int):
+				valuebefore, valueafter = self.valuewithoutitem(key)
+				if value.bit_length() > self.elemsize:
+					return  # Cas invalide
+				newitem = value.to_bytes(self.elemsize, byteorder=DataElem.order)
+				self.value = valuebefore + newitem + valueafter
 
 
 class Uint(DataElem):
@@ -200,3 +310,21 @@ class Opaque(DataArray):
 			size = len(arg)
 			super().__init__(1, size)
 			self.read(arg)
+
+
+def datatests():
+	test = DataStruct((DataElem(1, 3), Opaque(b'\x08BASEDGOD'), Uint32(100000)), ('kon', 'ban', 'wa'))
+	singletest('t.size() == 14 and isinstance(t.value, tuple) and len(t.value) == 3', t=test)
+	singletest('bytes(t) == right_value', t=test, right_value=b'\x03\x08BASEDGOD\x00\x01\x86\xa0')
+	test.ban = Uint8(5)
+	singletest('bytes(t) == right_value', t=test, right_value=b'\x03\x05\x00\x01\x86\xa0')
+	singletest('int(t.wa.value) == right_value', t=test, right_value=100000)
+	fixedvect = DataElemVector(2, 46, 3, b'\x00ABCDEFGH\x04\x06')
+	singletest('bytes(v) == right_value', v=fixedvect, right_value=b'\x06\x00ABCDEFGH\x04\x06\x00')
+	singletest('v.size() == 13', v=fixedvect)
+	singletest('v.vectsize == 6', v=fixedvect)
+	fixedvect[4] = b'HI'
+	fixedvect[5] = b'JK'
+	singletest('bytes(v) == right_value', v=fixedvect, right_value=b'\x06\x00ABCDEFGHIJK')
+	return True
+
