@@ -26,6 +26,12 @@ class MsgPublicKey(data.DataStruct):
 		return bytes(self.pkx.value), bytes(self.pky.value)
 
 
+class MsgSession(data.DataStruct):
+	def __init__(self):
+		# Si quit est à 1, on quitte
+		super().__init__((data.Uint8(0), data.DataElemVector(1, 1024)), ('quit', 'm'))
+
+
 def scripttests():
 	testcurve = ec.nistCurves[0]
 	e1 = ecc.ECEntity(testcurve)
@@ -87,7 +93,6 @@ class ComEntity:
 	def close(self):
 		print('Closing connection')
 		if self.s:
-			# self.s.shutdown(socket.SHUT_RDWR)
 			self.s.close()
 
 
@@ -95,6 +100,25 @@ class Client(ComEntity):
 	def connect(self):
 		self.s.connect((self.host, self.port))
 		print('Connected')
+
+	def loop(self):
+		loop_continue = True
+		while loop_continue:
+			msg = MsgSession()
+			try:
+				text = input('> ')
+				if text == '' or text == '\0':
+					msg.quit = data.Uint8(1)
+					self.s.sendall(bytes(msg))
+					break
+				else:
+					textb = text.encode('UTF-8')
+					msg.m.setvalue(textb)
+					self.s.sendall(bytes(msg))
+			except EOFError:
+				msg.quit = data.Uint8(1)
+				self.s.sendall(bytes(msg))
+				break
 
 
 class Server(ComEntity):
@@ -113,6 +137,17 @@ class Server(ComEntity):
 		self.netobj = self.c
 		print('Connected to ', self.raddr)
 
+	def loop(self):
+		loop_continue = True
+		while loop_continue:
+			msg = MsgSession()
+			msg.read(self.c.recv(4096))
+			if int(msg.quit) > 0:
+				loop_continue = False
+			else:
+				textstr = bytes(msg.m.value).decode('UTF-8')
+				print("→ " + textstr)
+
 	def close(self):
 		if self.c:
 			self.c.close()
@@ -125,6 +160,7 @@ if function == 'client':
 		client.connect()
 		client.sendpubkey()
 		client.recpubkey()
+		client.loop()
 	finally:
 		client.close()
 	exit()
@@ -135,6 +171,7 @@ if function == 'server':
 		server.connect()
 		server.recpubkey()
 		server.sendpubkey()
+		server.loop()
 	finally:
 		server.close()
 	exit()

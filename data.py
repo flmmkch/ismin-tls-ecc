@@ -212,7 +212,7 @@ class DataElemVector(DataElem):
 		self.ceiling = ceiling
 		self.floor = floor
 		if value:
-			self.value = bytes(value)[:self.ceiling]
+			self.value = bytes(value)[:self.ceiling * self.elemsize]
 			self.vectsize = len(self.value) // self.elemsize
 			if (self.elemsize * self.vectsize) < len(self.value):
 				self.vectsize += 1
@@ -231,6 +231,18 @@ class DataElemVector(DataElem):
 		if len(self.value) < self.vectsize * self.elemsize:
 			self.value += b'\x00' * (self.vectsize * self.elemsize - len(self.value))
 		i += self.vectsize * self.elemsize
+		return i
+
+	def setvalue(self, newvalue):
+		if isinstance(newvalue, DataVector) or isinstance(newvalue, DataElemVector):
+			return self.read(newvalue)
+		vbytes = bytes(newvalue)
+		i = 0
+		self.vectsize = min(int(math.ceil(len(vbytes) / self.elemsize)), self.ceiling)
+		# then read the elements
+		self.value = vbytes[:self.vectsize * self.elemsize]
+		if len(self.value) < self.vectsize * self.elemsize:
+			self.value += b'\x00' * (self.vectsize * self.elemsize - len(self.value))
 		return i
 
 	def to_bytes(self):
