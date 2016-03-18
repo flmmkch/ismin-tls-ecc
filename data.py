@@ -212,8 +212,8 @@ class DataElemVector(DataElem):
 		self.ceiling = ceiling
 		self.floor = floor
 		if value:
-			self.value = bytes(value)
-			self.vectsize = len(value) // self.elemsize
+			self.value = bytes(value)[:self.ceiling]
+			self.vectsize = len(self.value) // self.elemsize
 			if (self.elemsize * self.vectsize) < len(self.value):
 				self.vectsize += 1
 				self.value += b'\x00' * ((self.elemsize * self.vectsize) - len(value))
@@ -227,7 +227,7 @@ class DataElemVector(DataElem):
 		i += nbytes(self.ceiling)
 		self.vectsize = int.from_bytes(newvalue[:i], byteorder=DataElem.order)
 		# then read the elements
-		self.value = bytes(newvalue)[:(self.vectsize * self.elemsize)]
+		self.value = bytes(newvalue)[i:i+(self.vectsize * self.elemsize)]
 		if len(self.value) < self.vectsize * self.elemsize:
 			self.value += b'\x00' * (self.vectsize * self.elemsize - len(self.value))
 		return i

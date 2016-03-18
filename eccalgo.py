@@ -25,11 +25,13 @@ class ECEntity:
 		if not secret:
 			secret = mpz(Sr().randint(1, (curve.params.order - 1)))
 		self.secret = secret
-		self.pubkey = (curve.g * secret).affine()
+		affinecoord = (curve.g * secret).affine()
+		self.pubkey = (gmpy2.to_binary(affinecoord[0]), gmpy2.to_binary(affinecoord[1]))
 		self.curve = curve
 
-	def sharedsecret(self, otherpubkey):
-		return (ec.PointJ(self.curve, otherpubkey) * self.secret).affine()[0]
+	def sharedsecret(self, pubkey):
+		pkobj = (gmpy2.from_binary(pubkey[0]), gmpy2.from_binary(pubkey[1]))
+		return (ec.PointJ(self.curve, pkobj) * self.secret).affine()[0]
 
 
 def sign(entity: ECEntity, message, hashalgo=SHA):
@@ -52,7 +54,8 @@ def sign(entity: ECEntity, message, hashalgo=SHA):
 
 # Renvoie True si la signature est valide, False sinon
 def verifysignature(curve, pubkey, signature, message, hashalgo=SHA):
-	publickeypoint = ec.PointJ(curve, pubkey)
+	pkobj = (gmpy2.from_binary(pubkey[0]), gmpy2.from_binary(pubkey[1]))
+	publickeypoint = ec.PointJ(curve, pkobj)
 	n = curve.params.order
 	if isinstance(message, str):
 		message = message.encode('UTF-8')

@@ -395,6 +395,8 @@ class CertificateStruct(DataStruct):
 		super().__init__((certificate_list,), ('certificate_list',))
 
 
+# Envoyé par le serveur quand le CertificateStruct du serveur (si il a été envoyé) ne contient pas assez de données pour
+# que le client puisse échanger un premaster secret
 class ServerKeyExchange(DataStruct):
 	def __init__(self):
 		super().__init__(())
