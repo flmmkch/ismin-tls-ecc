@@ -11,6 +11,14 @@ from tests import  singletest
 function = sys.argv[1]
 
 
+class SimpleByteStr(data.DataElemVector):
+	def __init__(self, v=None):
+		if v:
+			super().__init__(1, 512, 0, v)
+		else:
+			super().__init__(1, 512, 0)
+
+
 # Structures de données nécessaires
 class MsgPublicKey(data.DataStruct):
 	def __init__(self, entity: ecc.ECEntity=None):
@@ -102,6 +110,7 @@ class Client(ComEntity):
 		print('Connected')
 
 	def loop(self):
+		aescipher = AES.new(self.mastersecret[:32], AES.MODE_CFB, self.mastersecret[:AES.block_size])
 		loop_continue = True
 		while loop_continue:
 			msg = MsgSession()
@@ -113,7 +122,9 @@ class Client(ComEntity):
 					break
 				else:
 					textb = text.encode('UTF-8')
-					msg.m.setvalue(textb)
+
+					cipherb = aescipher.encrypt(textb)
+					msg.m.setvalue(cipherb)
 					self.s.sendall(bytes(msg))
 			except EOFError:
 				msg.quit = data.Uint8(1)
@@ -138,6 +149,7 @@ class Server(ComEntity):
 		print('Connected to ', self.raddr)
 
 	def loop(self):
+		aescipher = AES.new(self.mastersecret[:32], AES.MODE_CFB, self.mastersecret[:AES.block_size])
 		loop_continue = True
 		while loop_continue:
 			msg = MsgSession()
@@ -145,7 +157,7 @@ class Server(ComEntity):
 			if int(msg.quit) > 0:
 				loop_continue = False
 			else:
-				textstr = bytes(msg.m.value).decode('UTF-8')
+				textstr = aescipher.decrypt(bytes(msg.m.value)).decode('UTF-8')
 				print("→ " + textstr)
 
 	def close(self):
