@@ -19,6 +19,14 @@ def curvebits(curve: ec.EllipticCurveJ):
 	return curve.params.order.bit_length()
 
 
+def int2bytes(e):
+	return int.to_bytes(int(e), int(e).bit_length() // 8 + 1, byteorder='big')
+
+
+def bytes2int(e):
+	return int.from_bytes(e, byteorder='big')
+
+
 class ECEntity:
 	def __init__(self, curve, secret=None):
 		assert(type(curve) == ec.EllipticCurveJ)
@@ -26,12 +34,13 @@ class ECEntity:
 			secret = mpz(Sr().randint(1, (curve.params.order - 1)))
 		self.secret = secret
 		affinecoord = (curve.g * secret).affine()
-		self.pubkey = (gmpy2.to_binary(affinecoord[0]), gmpy2.to_binary(affinecoord[1]))
+		self.pubkey = (int2bytes(affinecoord[0]), int2bytes(affinecoord[1]))
 		self.curve = curve
 
 	def sharedsecret(self, pubkey):
-		pkobj = (gmpy2.from_binary(pubkey[0]), gmpy2.from_binary(pubkey[1]))
-		return (ec.PointJ(self.curve, pkobj) * self.secret).affine()[0]
+		pkobj = (bytes2int(pubkey[0]), bytes2int(pubkey[1]))
+		ss_int = (ec.PointJ(self.curve, pkobj) * self.secret).affine()[0]
+		return int2bytes(ss_int)
 
 
 def sign(entity: ECEntity, message, hashalgo=SHA):
@@ -49,12 +58,12 @@ def sign(entity: ECEntity, message, hashalgo=SHA):
 		s = gmpy2.divm(e + entity.secret * r, k, n)
 		if s == 0:
 			continue
-		return r, s
+		return int(r), int(s)
 
 
 # Renvoie True si la signature est valide, False sinon
 def verifysignature(curve, pubkey, signature, message, hashalgo=SHA):
-	pkobj = (gmpy2.from_binary(pubkey[0]), gmpy2.from_binary(pubkey[1]))
+	pkobj = (bytes2int(pubkey[0]), bytes2int(pubkey[1]))
 	publickeypoint = ec.PointJ(curve, pkobj)
 	n = curve.params.order
 	if isinstance(message, str):

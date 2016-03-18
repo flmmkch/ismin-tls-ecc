@@ -225,11 +225,12 @@ class DataElemVector(DataElem):
 		i = 0
 		# first read the size
 		i += nbytes(self.ceiling)
-		self.vectsize = int.from_bytes(newvalue[:i], byteorder=DataElem.order)
+		self.vectsize = int.from_bytes(bytes(newvalue)[:i], byteorder=DataElem.order)
 		# then read the elements
 		self.value = bytes(newvalue)[i:i+(self.vectsize * self.elemsize)]
 		if len(self.value) < self.vectsize * self.elemsize:
 			self.value += b'\x00' * (self.vectsize * self.elemsize - len(self.value))
+		i += self.vectsize * self.elemsize
 		return i
 
 	def to_bytes(self):

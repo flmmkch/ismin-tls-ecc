@@ -6,9 +6,41 @@ import sys
 from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
 import data
-from data import DataElem, DataStruct, DataArray, DataVector, DataElemVector, Uint8, Uint16, Uint24, Uint32, Opaque
+from tests import  singletest
 
 function = sys.argv[1]
+
+
+# Structures de données nécessaires
+class MsgPublicKey(data.DataStruct):
+	def __init__(self, entity: ecc.ECEntity=None):
+		if entity:
+			pkx = data.DataElemVector(1, 1024, 0, bytes(entity.pubkey[0]))
+			pky = data.DataElemVector(1, 1024, 0, bytes(entity.pubkey[1]))
+		else:
+			pkx = data.DataElemVector(1, 1024, 0)
+			pky = data.DataElemVector(1, 1024, 0)
+		super().__init__((pkx, pky), ('pkx', 'pky'))
+
+	def pubkey(self):
+		return bytes(self.pkx.value), bytes(self.pky.value)
+
+
+def scripttests():
+	testcurve = ec.nistCurves[0]
+	e1 = ecc.ECEntity(testcurve)
+	e2 = ecc.ECEntity(testcurve)
+	m1 = MsgPublicKey(e1)
+	m2 = MsgPublicKey()
+	m2.read(bytes(m1))
+	pk1 = m2.pubkey()
+	m1 = MsgPublicKey(e2)
+	m2.read(bytes(m1))
+	pk2 = m2.pubkey()
+	singletest('pk1 == e1.pubkey', pk1=pk1, e1=e1)
+	singletest('pk2 == e2.pubkey', pk2=pk2, e2=e2)
+	singletest('e1.sharedsecret(e2.pubkey) == e2.sharedsecret(e1.pubkey)', e1=e1, e2=e2)
+	singletest('e1.sharedsecret(pk2) == e2.sharedsecret(pk1)', e1=e1, e2=e2, pk1=pk1, pk2=pk2)
 
 if function == 'test' or function == 'tests':
 	print('Début des tests')
@@ -17,22 +49,11 @@ if function == 'test' or function == 'tests':
 	ecc.ecdhtests()
 	ecc.ecdsatests()
 	data.datatests()
+	scripttests()
 	print('Fin des tests')
 	exit()
 
 curve = ec.nistCurves[0]
-
-
-# Structures de données nécessaires
-class MsgPublicKey(DataStruct):
-	def __init__(self, entity: ecc.ECEntity=None):
-		if entity:
-			pkx = DataElemVector(1, 1024, 0, bytes(entity.pubkey[0]))
-			pky = DataElemVector(1, 1024, 0, bytes(entity.pubkey[1]))
-		else:
-			pkx = DataElemVector(1, 1024, 0)
-			pky = DataElemVector(1, 1024, 0)
-		super().__init__((pkx, pky), ('pkx', 'pky'))
 
 
 class ComEntity:
@@ -40,7 +61,7 @@ class ComEntity:
 
 	def __init__(self, host=socket.gethostname(), port=defaultport):
 		# Partie réseau
-		self.s = socket.socket()
+		self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.host = host
 		self.port = port
 		self.netobj = self.s
@@ -49,28 +70,37 @@ class ComEntity:
 		self.ece = ecc.ECEntity(curve)
 
 		# Partie crypto
+		self.otherpk = None
 		self.mastersecret = None
 
 	def sendpubkey(self):
-		self.netobj.send(bytes(MsgPublicKey(self.ece)))
+		pkobj = MsgPublicKey(self.ece)
+		self.netobj.sendall(bytes(pkobj))
 
 	def recpubkey(self):
-		pkstruct = MsgPublicKey()
-		pkstruct.read(self.netobj.recv(4096))
-		self.mastersecret = self.ece.sharedsecret((pkstruct.pkx.value, pkstruct.pky.value))
+		pkobj = MsgPublicKey()
+		rbytes = self.netobj.recv(4096)
+		pkobj.read(rbytes)
+		self.otherpk = (pkobj.pkx.value, pkobj.pky.value)
+		self.mastersecret = self.ece.sharedsecret(self.otherpk)
 
 	def close(self):
-		self.s.close()
+		print('Closing connection')
+		if self.s:
+			# self.s.shutdown(socket.SHUT_RDWR)
+			self.s.close()
 
 
 class Client(ComEntity):
 	def connect(self):
 		self.s.connect((self.host, self.port))
+		print('Connected')
 
 
 class Server(ComEntity):
 	def __init__(self, host=socket.gethostname(), port=ComEntity.defaultport):
 		super().__init__(host, port)
+		self.s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 		self.c = None
 		self.raddr = None
 
@@ -81,26 +111,30 @@ class Server(ComEntity):
 		# On ne fait qu'une seule connection ici
 		self.c, self.raddr = self.s.accept()
 		self.netobj = self.c
+		print('Connected to ', self.raddr)
 
 	def close(self):
-		self.c.close()
+		if self.c:
+			self.c.close()
 		super().close()
 
 
 if function == 'client':
 	client = Client()
-	client.connect()
-	client.sendpubkey()
-	client.recpubkey()
-	print(bytes(client.mastersecret))
-	client.close()
+	try:
+		client.connect()
+		client.sendpubkey()
+		client.recpubkey()
+	finally:
+		client.close()
 	exit()
 
 if function == 'server':
 	server = Server()
-	server.connect()
-	server.recpubkey()
-	server.sendpubkey()
-	print(bytes(server.mastersecret))
-	server.close()
+	try:
+		server.connect()
+		server.recpubkey()
+		server.sendpubkey()
+	finally:
+		server.close()
 	exit()
