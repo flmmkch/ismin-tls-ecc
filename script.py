@@ -14,9 +14,51 @@ function = sys.argv[1]
 class SimpleByteStr(data.DataElemVector):
 	def __init__(self, v=None):
 		if v:
-			super().__init__(1, 2096, 0, v)
+			super().__init__(1, 2048, 0, v)
 		else:
-			super().__init__(1, 2096, 0)
+			super().__init__(1, 2048, 0)
+
+
+class SignedStr(data.DataStruct):
+	def __init__(self):
+		signature = data.DataStruct((data.DataElemVector(1, 2048, 0), data.DataElemVector(1, 1024, 0)), ('r', 's'))
+		super().__init__((SimpleByteStr(), signature), ('string', 'signature'))
+
+
+class MsgRecord(data.DataStruct):
+	TYPE_QUIT = 0
+	TYPE_SIMPLE = 1
+	TYPE_ECDSA = 2
+
+	def __init__(self, t = TYPE_SIMPLE):
+		super().__init__((data.Uint8(t), data.DataElemVector(1, 4096)), ('type', 'content'))
+		self.ece = None
+
+	def getstr(self):
+		if int(self.type) == MsgRecord.TYPE_SIMPLE:
+			string = SimpleByteStr()
+			string.read(self.content.value)
+			return bytes(string.value)
+		elif int(self.type) == MsgRecord.TYPE_ECDSA:
+			string = SignedStr()
+			string.read(self.content.value)
+			return bytes(string.string.value)
+
+	def getsignature(self):
+		if int(self.type) == MsgRecord.TYPE_ECDSA:
+			signedstr = SignedStr()
+			signedstr.read(self.content.value)
+			return ecc.bytes2int(signedstr.signature.r.value), ecc.bytes2int(signedstr.signature.s.value)
+
+	def setstr(self, string, signature=None):
+		if int(self.type) == MsgRecord.TYPE_SIMPLE:
+			self.content.setvalue(bytes(SimpleByteStr(string)))
+		elif int(self.type) == MsgRecord.TYPE_ECDSA:
+			signedstr = SignedStr()
+			signedstr.string.setvalue(string)
+			signedstr.signature.r.setvalue(ecc.int2bytes(signature[0]))
+			signedstr.signature.s.setvalue(ecc.int2bytes(signature[1]))
+			self.content.setvalue(bytes(signedstr))
 
 
 # Structures de données nécessaires
@@ -32,12 +74,6 @@ class MsgPublicKey(data.DataStruct):
 
 	def pubkey(self):
 		return bytes(self.pkx.value), bytes(self.pky.value)
-
-
-class MsgSession(data.DataStruct):
-	def __init__(self):
-		# Si quit est à 1, on quitte
-		super().__init__((data.Uint8(0), data.DataElemVector(1, 1024)), ('quit', 'm'))
 
 
 def scripttests():
@@ -83,12 +119,14 @@ class ComEntity:
 
 		# Partie courbes elliptiques
 		self.ece = None
+		self.curve = None
 
 		# Partie crypto
 		self.otherpk = None
 		self.mastersecret = None
 
 	def initec(self, entitycurve):
+		self.curve = entitycurve
 		self.ece = ecc.ECEntity(entitycurve)
 
 	def sendpubkey(self):
@@ -112,6 +150,7 @@ class Client(ComEntity):
 	def connect(self):
 		self.s.connect((self.host, self.port))
 		print('Connected')
+		print('Envoyez un message commençant par le caractère $ pour qu\'il soit signé')
 
 	def loop(self):
 		# le cipher AES utilise une partie du secret partagé comme vecteur d'initialisation
@@ -119,17 +158,25 @@ class Client(ComEntity):
 		aescipher = AES.new(self.mastersecret[:32], AES.MODE_CFB, self.mastersecret[:AES.block_size])
 		loop_continue = True
 		while loop_continue:
-			msg = MsgSession()
+			msg = MsgRecord()
 			try:
 				text = input('> ')
 				if text == '' or text == '\0':
-					msg.quit = data.Uint8(1)
+					msg.type.value = MsgRecord.TYPE_QUIT
 					self.s.sendall(bytes(msg))
 					break
 				else:
+					# Si le texte commence par $, signer le message
+					signature = None
+					if text[0] == '$':
+						msg.type.value = MsgRecord.TYPE_ECDSA
+						text = text[1:].strip()
+						signature = ecc.sign(self.ece, text, SHA256)
+					else:
+						msg.type.value = MsgRecord.TYPE_SIMPLE
 					textb = text.encode('UTF-8')
 					cipherb = aescipher.encrypt(textb)
-					msg.m.setvalue(cipherb)
+					msg.setstr(cipherb, signature)
 					self.s.sendall(bytes(msg))
 			except EOFError:
 				msg.quit = data.Uint8(1)
@@ -157,20 +204,26 @@ class Server(ComEntity):
 		aescipher = AES.new(self.mastersecret[:32], AES.MODE_CFB, self.mastersecret[:AES.block_size])
 		loop_continue = True
 		while loop_continue:
-			msg = MsgSession()
+			msg = MsgRecord()
 			msg.read(self.c.recv(8192))
-			if int(msg.quit) > 0:
+			if int(msg.type) == MsgRecord.TYPE_QUIT:
 				loop_continue = False
 			else:
-				textstr = aescipher.decrypt(bytes(msg.m.value)).decode('UTF-8')
+				textstr = aescipher.decrypt(msg.getstr())
+				textstr = textstr.decode('UTF-8')
 				print('→', textstr)
+				if int(msg.type) == MsgRecord.TYPE_ECDSA:
+					signature = msg.getsignature()
+					if ecc.verifysignature(self.curve, self.otherpk, signature, textstr, SHA256):
+						validity = 'verified'
+					else:
+						validity = 'invalid signature'
+					print('    Message signed with ECDSA: ' + validity)
 
 	def close(self):
 		if self.c:
 			self.c.close()
 		super().close()
-
-import gmpy2
 
 curve = ec.nistCurves[4]
 
