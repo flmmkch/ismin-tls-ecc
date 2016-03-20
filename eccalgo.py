@@ -19,20 +19,28 @@ def curvebits(curve: ec.EllipticCurveJ):
 	return curve.params.order.bit_length()
 
 
-def int2bytes(e):
-	return int.to_bytes(int(e), int(e).bit_length() // 8 + 1, byteorder='big')
+def int2bytes(e, fixedsize=None):
+	if fixedsize:
+		size = int(fixedsize)
+	else:
+		size = int(e).bit_length() // 8 + 1
+	return int.to_bytes(int(e), size, byteorder='big')
+	# return gmpy2.to_binary(e)
 
 
 def bytes2int(e):
 	return int.from_bytes(e, byteorder='big')
+	# return gmpy2.from_binary(e)
 
 
 class ECEntity:
 	def __init__(self, curve, secret=None):
 		assert(type(curve) == ec.EllipticCurveJ)
 		if not secret:
-			secret = mpz(Sr().randint(1, (curve.params.order - 1)))
-		self.secret = secret
+			n = len(mpz(curve.params.order))
+			secretint = Sr().randint(1 << (n - 3), (curve.params.order - 1))
+			secret = mpz(secretint)
+		self.secret = mpz(secret)
 		affinecoord = (curve.g * secret).affine()
 		self.pubkey = (int2bytes(affinecoord[0]), int2bytes(affinecoord[1]))
 		self.curve = curve
@@ -78,12 +86,18 @@ def verifysignature(curve, pubkey, signature, message, hashalgo=SHA):
 	return v == r  # on doit avoir r ≡ x1 (mod n)
 
 
-def ecdhtests(curve=ec.nistCurves[0]):
-	partya = ECEntity(curve)
-	partyb = ECEntity(curve)
-	sharedsecret1 = partya.sharedsecret(partyb.pubkey)
-	sharedsecret2 = partyb.sharedsecret(partya.pubkey)
-	return sharedsecret1 == sharedsecret2
+def ecdhtests(curve=ec.nistCurves[0], npairs=10, nchecks=3):
+	# test multiple times
+	for i in range(npairs):
+		partya = ECEntity(curve)
+		partyb = ECEntity(curve)
+		sharedsecret1 = partya.sharedsecret(partyb.pubkey)
+		sharedsecret2 = partyb.sharedsecret(partya.pubkey)
+		if sharedsecret1 != sharedsecret2:
+			print('ECDH test failed')
+			return False
+	print('ECDH test OK!')
+	return True
 
 
 def ecdsatests(message='Bonjour, ceci est un test', curve=ec.nistCurves[0]):

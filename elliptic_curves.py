@@ -282,7 +282,7 @@ nistParams = {'P-192': ParamSet(mpz('6277101735386680763835789423207666416083908
 			   }
 
 nistCurves = []
-for i in nistParams:
+for i in ['P-192', 'P-224', 'P-256', 'P-384', 'P-521']:
 	nistCurves.append(EllipticCurveJ(nistParams[i]))
 
 
